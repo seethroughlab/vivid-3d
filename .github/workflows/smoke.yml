@@ -1,0 +1,39 @@
+name: Smoke Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, macOS]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone vivid-core
+        run: git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
+
+      - name: Configure vivid-core
+        run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Create app bundle skeleton
+        run: mkdir -p ${{ github.workspace }}/../vivid/build/vivid.app/Contents/PlugIns
+
+      - name: Build test_demo_graphs
+        run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs -j$(sysctl -n hw.logicalcpu)
+
+      - name: Configure package
+        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
+
+      - name: Build operators
+        run: cmake --build build -j$(sysctl -n hw.logicalcpu)
+
+      - name: Copy operators to vivid build dir
+        run: cp build/*.dylib ${{ github.workspace }}/../vivid/build/
+
+      - name: Run smoke tests
+        run: cd ${{ github.workspace }}/../vivid/build && ./test_demo_graphs ${{ github.workspace }}/graphs
