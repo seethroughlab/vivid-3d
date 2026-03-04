@@ -32,7 +32,7 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
 
       - name: Build operators
-        run: cmake --build build -j$(sysctl -n hw.logicalcpu)
+        run: cmake --build build --target operators -j$(sysctl -n hw.logicalcpu)
 
       - name: Copy operators to vivid build dir
         run: cp build/*.dylib ${{ github.workspace }}/../vivid/build/

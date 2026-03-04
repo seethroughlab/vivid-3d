@@ -123,6 +123,12 @@ FetchContent_MakeAvailable(manifold)
 
 add_3d_operator(boolean3d operators/gpu/boolean3d/boolean3d.cpp EXTRA_LIBS manifold)
 
+# --- Operators meta-target (for smoke CI: builds only dylibs, skips test executables) ---
+add_custom_target(operators DEPENDS
+    render_3d shape3d transform3d scene_merge light3d mesh_import
+    deformer instancer3d particles3d sdf3d material3d ssao3d dof3d
+    environment3d boolean3d)
+
 # --- Tests ---
 enable_testing()
 
