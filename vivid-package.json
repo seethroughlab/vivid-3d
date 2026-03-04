@@ -1,0 +1,30 @@
+{
+  "name": "vivid-3d",
+  "version": "0.1.0",
+  "description": "3D rendering operators for Vivid",
+  "build": "cmake",
+  "gpu_operators": [
+    "gpu/render_3d",
+    "gpu/shape3d",
+    "gpu/transform3d",
+    "gpu/scene_merge",
+    "gpu/light3d",
+    "gpu/mesh_import",
+    "gpu/deformer",
+    "gpu/instancer3d",
+    "gpu/particles3d",
+    "gpu/sdf3d",
+    "gpu/material3d",
+    "gpu/ssao3d",
+    "gpu/dof3d",
+    "gpu/environment3d",
+    "gpu/boolean3d"
+  ],
+  "operators": [],
+  "dependencies": {
+    "vendor": [
+      { "name": "cgltf", "include": "deps/cgltf" },
+      { "name": "tinyobjloader", "include": "deps/tinyobjloader" }
+    ]
+  }
+}
