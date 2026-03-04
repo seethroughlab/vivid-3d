@@ -15,6 +15,9 @@ if(NOT DEFINED VIVID_BUILD_DIR)
     set(VIVID_BUILD_DIR "${VIVID_SRC_DIR}/build")
 endif()
 
+# Build package test executables (disabled for install/rebuild by default)
+option(VIVID_PACKAGE_BUILD_TESTS "Build vivid-3d package tests" OFF)
+
 # --- Operator API (header-only) ---
 add_library(vivid_operator_api INTERFACE)
 target_include_directories(vivid_operator_api INTERFACE
@@ -130,6 +133,7 @@ add_custom_target(operators DEPENDS
     environment3d boolean3d)
 
 # --- Tests ---
+if(VIVID_PACKAGE_BUILD_TESTS)
 enable_testing()
 
 # Locate vivid runtime sources needed for scheduler-based tests
@@ -142,11 +146,12 @@ set(VIVID_RUNTIME_SOURCES
 )
 
 # Find yyjson in the vivid build tree
+set(YYJSON_INCLUDE_DIR "${VIVID_SRC_DIR}/deps/yyjson")
 find_library(YYJSON_LIB yyjson PATHS "${VIVID_BUILD_DIR}" NO_DEFAULT_PATH)
 if(NOT YYJSON_LIB)
     # Build yyjson from vivid source
     add_library(yyjson STATIC ${VIVID_SRC_DIR}/deps/yyjson/yyjson.c)
-    target_include_directories(yyjson PUBLIC ${VIVID_SRC_DIR}/deps/yyjson)
+    target_include_directories(yyjson PUBLIC ${YYJSON_INCLUDE_DIR})
     set(YYJSON_LIB yyjson)
 endif()
 
@@ -157,6 +162,7 @@ function(add_3d_test name source)
     target_include_directories(${name} PRIVATE
         ${VIVID_SRC_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
+        ${YYJSON_INCLUDE_DIR}
         ${ARG_EXTRA_INCLUDES})
     target_link_libraries(${name} PRIVATE vivid_operator_api ${YYJSON_LIB} webgpu)
     if(ARG_DEPENDS)
@@ -192,6 +198,8 @@ add_3d_test(test_sdf3d        tests/test_sdf3d.cpp        DEPENDS sdf3d render_3
 
 # Copy test data
 configure_file(tests/data/tetrahedron.obj ${CMAKE_BINARY_DIR}/tests/data/tetrahedron.obj COPYONLY)
+
+endif()
 
 # Copy demo graphs
 file(GLOB _3D_GRAPHS graphs/*.json)
