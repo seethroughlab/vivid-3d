@@ -15,7 +15,9 @@ jobs:
           submodules: recursive
 
       - name: Clone vivid-core
-        run: git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
+        run: |
+          rm -rf ${{ github.workspace }}/../vivid
+          git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
 
       - name: Configure vivid-core
         run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo
