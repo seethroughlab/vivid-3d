@@ -318,7 +318,7 @@ int main() {
         auto& ns = sched.nodes_mut()[0];
         check(ns.is_gpu, "Render3D is GPU domain");
         check(ns.has_texture_output, "Render3D has texture output");
-        check(ns.scene_input_port_indices.size() == 1,
+        check(ns.data_input_port_indices.size() == 1,
               "Render3D has 1 scene input port");
         check(ns.texture_input_port_indices.empty(),
               "Render3D has 0 texture input ports");
