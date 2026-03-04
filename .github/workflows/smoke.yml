@@ -25,8 +25,8 @@ jobs:
       - name: Create app bundle skeleton
         run: mkdir -p ${{ github.workspace }}/../vivid/build/vivid.app/Contents/PlugIns
 
-      - name: Build test_demo_graphs
-        run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs -j$(sysctl -n hw.logicalcpu)
+      - name: Build test_demo_graphs and vivid core operators
+        run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
 
       - name: Configure package
         run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
