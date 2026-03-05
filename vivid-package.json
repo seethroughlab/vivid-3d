@@ -1,6 +1,7 @@
 {
   "name": "vivid-3d",
   "version": "0.1.0",
+  "vivid_core": ">=0.1.0 <2.0.0",
   "description": "3D rendering operators for Vivid",
   "build": "cmake",
   "gpu_operators": [
