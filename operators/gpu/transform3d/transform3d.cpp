@@ -23,6 +23,41 @@ struct Transform3D : vivid::OperatorBase {
     vivid::Param<float> scale_y {"scale_y", 1.0f,  0.01f, 50.0f};
     vivid::Param<float> scale_z {"scale_z", 1.0f,  0.01f, 50.0f};
 
+    Transform3D() {
+        vivid::semantic_tag(pos_x, "position_xyz");
+        vivid::semantic_shape(pos_x, "scalar");
+        vivid::semantic_intent(pos_x, "position_x");
+        vivid::semantic_tag(pos_y, "position_xyz");
+        vivid::semantic_shape(pos_y, "scalar");
+        vivid::semantic_intent(pos_y, "position_y");
+        vivid::semantic_tag(pos_z, "position_xyz");
+        vivid::semantic_shape(pos_z, "scalar");
+        vivid::semantic_intent(pos_z, "position_z");
+
+        vivid::semantic_tag(rot_x, "rotation_radians");
+        vivid::semantic_shape(rot_x, "scalar");
+        vivid::semantic_unit(rot_x, "rad");
+        vivid::semantic_intent(rot_x, "rotation_x");
+        vivid::semantic_tag(rot_y, "rotation_radians");
+        vivid::semantic_shape(rot_y, "scalar");
+        vivid::semantic_unit(rot_y, "rad");
+        vivid::semantic_intent(rot_y, "rotation_y");
+        vivid::semantic_tag(rot_z, "rotation_radians");
+        vivid::semantic_shape(rot_z, "scalar");
+        vivid::semantic_unit(rot_z, "rad");
+        vivid::semantic_intent(rot_z, "rotation_z");
+
+        vivid::semantic_tag(scale_x, "scale_xyz");
+        vivid::semantic_shape(scale_x, "scalar");
+        vivid::semantic_intent(scale_x, "scale_x");
+        vivid::semantic_tag(scale_y, "scale_xyz");
+        vivid::semantic_shape(scale_y, "scalar");
+        vivid::semantic_intent(scale_y, "scale_y");
+        vivid::semantic_tag(scale_z, "scale_xyz");
+        vivid::semantic_shape(scale_z, "scalar");
+        vivid::semantic_intent(scale_z, "scale_z");
+    }
+
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         vivid::param_group(pos_x, "Transform");
         vivid::param_group(pos_y, "Transform");

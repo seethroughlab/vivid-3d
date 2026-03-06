@@ -294,7 +294,7 @@ int main() {
         // GpuFillOp as HDRI source (bright green — will create green-tinted environment)
         g.add_node("hdri", "GpuFillOp", {{"r", 0.3f}, {"g", 0.7f}, {"b", 0.5f}});
         g.add_node("shape", "Shape3D", {{"r", 0.8f}, {"g", 0.6f}, {"b", 0.4f}});
-        g.add_node("env", "Environment3D", {{"intensity", 1.0f}});
+        g.add_node("env", "Environment3D", {{"intensity", 1.0f}, {"rotation_y", 35.0f}});
         g.add_node("merge", "SceneMerge");
         g.add_node("render", "Render3D", {
             {"cam_x", 0.0f}, {"cam_y", 1.0f}, {"cam_z", 3.0f},
@@ -326,6 +326,7 @@ int main() {
                 float center_lum = avg_luminance(pixels, W, H, W/4, H/4, W*3/4, H*3/4);
                 std::fprintf(stderr, "  Center luminance (with IBL): %.4f\n", center_lum);
                 check(center_lum > 0.01f, "IBL environment produces non-black output");
+                check(std::fabs(center_lum) < 1e6f, "rotation_y path executes without invalid luminance");
             }
         }
 

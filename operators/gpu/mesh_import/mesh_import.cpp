@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <filesystem>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -361,6 +362,9 @@ private:
 
         Format fmt = detect_format(cached_path_);
         bool ok = false;
+        if (fmt == FMT_UNKNOWN) {
+            std::fprintf(stderr, "[mesh_import] Unsupported file extension: %s\n", cached_path_.c_str());
+        }
         switch (fmt) {
             case FMT_OBJ:  ok = load_obj(cached_path_, verts, indices); break;
             case FMT_GLTF: ok = load_gltf(cached_path_, verts, indices); break;
@@ -368,8 +372,9 @@ private:
         }
 
         if (!ok || verts.empty() || indices.empty()) {
-            std::fprintf(stderr, "[mesh_import] Failed to load: %s\n", cached_path_.c_str());
-            return;
+            std::fprintf(stderr, "[mesh_import] Failed to load '%s' — using fallback marker mesh\n",
+                         cached_path_.c_str());
+            build_fallback_mesh(verts, indices);
         }
 
         cpu_verts_ = verts;
@@ -381,6 +386,27 @@ private:
             gpu->device, gpu->queue, verts.data(), vertex_buf_size_, "MeshImport VB");
         index_buffer_ = vivid::gpu::create_index_buffer(
             gpu->device, gpu->queue, indices.data(), index_count_, "MeshImport IB");
+    }
+
+    static void build_fallback_mesh(std::vector<vivid::gpu::Vertex3D>& out_verts,
+                                    std::vector<uint32_t>& out_indices) {
+        out_verts.clear();
+        out_indices.clear();
+        vivid::gpu::Vertex3D a{}, b{}, c{};
+        a.position[0] = -0.5f; a.position[1] = -0.5f; a.position[2] = 0.0f;
+        b.position[0] =  0.5f; b.position[1] = -0.5f; b.position[2] = 0.0f;
+        c.position[0] =  0.0f; c.position[1] =  0.5f; c.position[2] = 0.0f;
+        for (auto* v : {&a, &b, &c}) {
+            v->normal[0] = 0.0f; v->normal[1] = 0.0f; v->normal[2] = 1.0f;
+            v->tangent[0] = 1.0f; v->tangent[1] = 0.0f; v->tangent[2] = 0.0f; v->tangent[3] = 1.0f;
+        }
+        a.uv[0] = 0.0f; a.uv[1] = 1.0f;
+        b.uv[0] = 1.0f; b.uv[1] = 1.0f;
+        c.uv[0] = 0.5f; c.uv[1] = 0.0f;
+        out_verts.push_back(a);
+        out_verts.push_back(b);
+        out_verts.push_back(c);
+        out_indices = {0, 1, 2};
     }
 
     // =========================================================================
@@ -518,7 +544,9 @@ private:
     // =========================================================================
 
     // Decode a glTF texture image via stb_image into RGBA pixels.
-    static bool decode_gltf_image(const cgltf_texture_view& tv, ImageData& out) {
+    static bool decode_gltf_image(const cgltf_texture_view& tv,
+                                  const std::filesystem::path& gltf_dir,
+                                  ImageData& out) {
         if (!tv.texture || !tv.texture->image) return false;
         cgltf_image* img = tv.texture->image;
 
@@ -530,8 +558,23 @@ private:
             raw_data = static_cast<const uint8_t*>(cgltf_buffer_view_data(img->buffer_view));
             raw_size = img->buffer_view->size;
         } else if (img->uri) {
-            // External URI — not supported in this path (would need file I/O relative to .gltf)
-            return false;
+            if (std::strncmp(img->uri, "data:", 5) == 0) {
+                std::fprintf(stderr, "[mesh_import] data: URI textures are not currently supported\n");
+                return false;
+            }
+            std::filesystem::path tex_path = gltf_dir / img->uri;
+            int w, h, channels;
+            uint8_t* pixels = stbi_load(tex_path.string().c_str(), &w, &h, &channels, 4);
+            if (!pixels) {
+                std::fprintf(stderr, "[mesh_import] Failed to decode external texture: %s\n",
+                             tex_path.string().c_str());
+                return false;
+            }
+            out.w = w;
+            out.h = h;
+            out.pixels.assign(pixels, pixels + w * h * 4);
+            stbi_image_free(pixels);
+            return true;
         }
 
         if (!raw_data || raw_size == 0) return false;
@@ -551,30 +594,39 @@ private:
     bool load_gltf(const std::string& path,
                    std::vector<vivid::gpu::Vertex3D>& out_verts,
                    std::vector<uint32_t>& out_indices) {
+        std::filesystem::path gltf_path(path);
+        std::filesystem::path gltf_dir = gltf_path.parent_path();
         cgltf_options options{};
         cgltf_data* data = nullptr;
 
         cgltf_result result = cgltf_parse_file(&options, path.c_str(), &data);
         if (result != cgltf_result_success) {
-            std::fprintf(stderr, "[mesh_import] glTF parse failed: %d\n", static_cast<int>(result));
+            std::fprintf(stderr, "[mesh_import] glTF parse failed (%d): %s\n",
+                         static_cast<int>(result), path.c_str());
             return false;
         }
 
         result = cgltf_load_buffers(&options, data, path.c_str());
         if (result != cgltf_result_success) {
-            std::fprintf(stderr, "[mesh_import] glTF buffer load failed\n");
+            std::fprintf(stderr, "[mesh_import] glTF buffer load failed (%d): %s\n",
+                         static_cast<int>(result), path.c_str());
             cgltf_free(data);
             return false;
         }
 
         bool material_extracted = false;
+        size_t skipped_non_triangles = 0;
+        size_t skipped_no_position = 0;
 
         // Iterate all meshes/primitives
         for (cgltf_size mi = 0; mi < data->meshes_count; ++mi) {
             cgltf_mesh& mesh = data->meshes[mi];
             for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi) {
                 cgltf_primitive& prim = mesh.primitives[pi];
-                if (prim.type != cgltf_primitive_type_triangles) continue;
+                if (prim.type != cgltf_primitive_type_triangles) {
+                    ++skipped_non_triangles;
+                    continue;
+                }
 
                 // Find accessors
                 cgltf_accessor* pos_acc = nullptr;
@@ -593,7 +645,10 @@ private:
                         uv_acc = prim.attributes[ai].data;
                 }
 
-                if (!pos_acc) continue;
+                if (!pos_acc) {
+                    ++skipped_no_position;
+                    continue;
+                }
 
                 uint32_t vert_base = static_cast<uint32_t>(out_verts.size());
                 cgltf_size vert_count = pos_acc->count;
@@ -631,17 +686,25 @@ private:
 
                 // Extract PBR material from the first primitive that has one
                 if (!material_extracted && prim.material) {
-                    extract_gltf_material(prim.material);
+                    extract_gltf_material(prim.material, gltf_dir);
                     material_extracted = true;
                 }
             }
         }
 
         cgltf_free(data);
+        if (skipped_non_triangles > 0) {
+            std::fprintf(stderr, "[mesh_import] glTF notice: skipped %zu non-triangle primitive(s)\n",
+                         skipped_non_triangles);
+        }
+        if (skipped_no_position > 0) {
+            std::fprintf(stderr, "[mesh_import] glTF notice: skipped %zu primitive(s) missing POSITION\n",
+                         skipped_no_position);
+        }
         return !out_verts.empty();
     }
 
-    void extract_gltf_material(const cgltf_material* mat) {
+    void extract_gltf_material(const cgltf_material* mat, const std::filesystem::path& gltf_dir) {
         if (mat->has_pbr_metallic_roughness) {
             auto& pbr = mat->pbr_metallic_roughness;
             std::memcpy(gltf_base_color_, pbr.base_color_factor, sizeof(float) * 4);
@@ -650,22 +713,33 @@ private:
             has_gltf_material_ = true;
 
             // Decode albedo (baseColorTexture)
-            decode_gltf_image(pbr.base_color_texture, loaded_images_[0]);
+            if (!decode_gltf_image(pbr.base_color_texture, gltf_dir, loaded_images_[0]) &&
+                pbr.base_color_texture.texture) {
+                std::fprintf(stderr, "[mesh_import] glTF warning: base color texture unavailable, using fallback\n");
+            }
 
             // Decode roughness/metallic texture
             // glTF: G=roughness, B=metallic. Shader expects R=roughness, G=metallic.
-            if (decode_gltf_image(pbr.metallic_roughness_texture, loaded_images_[2])) {
+            if (decode_gltf_image(pbr.metallic_roughness_texture, gltf_dir, loaded_images_[2])) {
                 swizzle_roughness_metallic(loaded_images_[2], gltf_metallic_);
                 has_rm_texture_ = true;
+            } else if (pbr.metallic_roughness_texture.texture) {
+                std::fprintf(stderr, "[mesh_import] glTF warning: metallic/roughness texture unavailable, using fallback\n");
             }
         }
 
         // Normal map
-        decode_gltf_image(mat->normal_texture, loaded_images_[1]);
+        if (!decode_gltf_image(mat->normal_texture, gltf_dir, loaded_images_[1]) &&
+            mat->normal_texture.texture) {
+            std::fprintf(stderr, "[mesh_import] glTF warning: normal texture unavailable, using fallback\n");
+        }
 
         // Emissive
         std::memcpy(gltf_emissive_, mat->emissive_factor, sizeof(float) * 3);
-        decode_gltf_image(mat->emissive_texture, loaded_images_[3]);
+        if (!decode_gltf_image(mat->emissive_texture, gltf_dir, loaded_images_[3]) &&
+            mat->emissive_texture.texture) {
+            std::fprintf(stderr, "[mesh_import] glTF warning: emissive texture unavailable, using fallback\n");
+        }
 
         gltf_unlit_ = mat->unlit;
     }

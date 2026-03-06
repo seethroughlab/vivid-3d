@@ -14,7 +14,7 @@
 static const char* kEquirectToCubeShader = R"(
 struct FaceParams {
     face: u32,
-    _pad0: u32,
+    aux_bits: u32, // rotation_y_degrees float bits
     _pad1: u32,
     _pad2: u32,
 }
@@ -71,10 +71,19 @@ fn dir_to_equirect_uv(dir: vec3f) -> vec2f {
     );
 }
 
+fn rotate_y(dir: vec3f, angle: f32) -> vec3f {
+    let c = cos(angle);
+    let s = sin(angle);
+    return vec3f(c * dir.x + s * dir.z, dir.y, -s * dir.x + c * dir.z);
+}
+
 @fragment
 fn fs_equirect_to_cube(in: FullscreenOutput) -> @location(0) vec4f {
     let dir = face_uv_to_dir(params.face, in.uv);
-    let uv = dir_to_equirect_uv(dir);
+    let rot_deg = bitcast<f32>(params.aux_bits);
+    let rot_rad = rot_deg * PI / 180.0;
+    let dir_rot = rotate_y(dir, rot_rad);
+    let uv = dir_to_equirect_uv(dir_rot);
     return textureSample(equirect_map, equirect_sampler, uv);
 }
 )";
@@ -407,10 +416,13 @@ struct Environment3D : vivid::OperatorBase {
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> intensity {"intensity", 1.0f, 0.0f, 10.0f};
+    vivid::Param<float> rotation_y {"rotation_y", 0.0f, -180.0f, 180.0f};
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         vivid::param_group(intensity, "Environment");
+        vivid::param_group(rotation_y, "Environment");
         out.push_back(&intensity);
+        out.push_back(&rotation_y);
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
@@ -446,9 +458,12 @@ struct Environment3D : vivid::OperatorBase {
         }
 
         // Re-compute IBL if input changed
-        if (input_view != cached_input_view_) {
+        uint32_t rotation_bits = 0;
+        std::memcpy(&rotation_bits, &rotation_y.value, sizeof(uint32_t));
+        if (input_view != cached_input_view_ || rotation_bits != cached_rotation_bits_) {
             cached_input_view_ = input_view;
-            precompute_ibl(gpu, input_view);
+            cached_rotation_bits_ = rotation_bits;
+            precompute_ibl(gpu, input_view, rotation_y.value);
         }
 
         // Output fragment
@@ -503,6 +518,7 @@ private:
     vivid::gpu::VividSceneFragment fragment_{};
     bool initialized_ = false;
     WGPUTextureView cached_input_view_ = nullptr;
+    uint32_t cached_rotation_bits_ = 0;
 
     // Shader modules
     WGPUShaderModule equirect_shader_   = nullptr;
@@ -768,10 +784,12 @@ private:
         wgpuRenderPassEncoderRelease(pass);
     }
 
-    void precompute_ibl(VividGpuState* gpu, WGPUTextureView input_view) {
+    void precompute_ibl(VividGpuState* gpu, WGPUTextureView input_view, float rotation_deg) {
+        uint32_t rotation_bits = 0;
+        std::memcpy(&rotation_bits, &rotation_deg, sizeof(uint32_t));
         // Step 1: Equirect → Unfiltered cubemap
         for (uint32_t face = 0; face < 6; ++face) {
-            uint32_t params[4] = { face, 0, 0, 0 };
+            uint32_t params[4] = { face, rotation_bits, 0, 0 };
             wgpuQueueWriteBuffer(gpu->queue, face_params_ubo_, 0, params, 16);
 
             // Create bind group for this pass
