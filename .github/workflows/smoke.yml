@@ -20,15 +20,14 @@ jobs:
 
       - name: Detect build arch
         run: |
-          wgpu_lib="${{ github.workspace }}/../vivid/build/_deps/wgpu-macos-x86_64-release-src/lib/libwgpu_native.dylib"
-          if [ ! -f "$wgpu_lib" ]; then
-            wgpu_lib="${{ github.workspace }}/../vivid/build/_deps/wgpu-macos-arm64-release-src/lib/libwgpu_native.dylib"
-          fi
-          if [ ! -f "$wgpu_lib" ]; then
+          wgpu_lib=$(find "${{ github.workspace }}/../vivid/build/_deps" -type f -name libwgpu_native.dylib 2>/dev/null | head -n 1)
+          if [ -z "$wgpu_lib" ]; then
             echo "Failed to locate libwgpu_native.dylib in vivid-core build" >&2
+            find "${{ github.workspace }}/../vivid/build/_deps" -maxdepth 3 -type f | sed -n '1,120p' >&2
             exit 1
           fi
           wgpu_archs=$(lipo -archs "$wgpu_lib")
+          echo "Using libwgpu_native: $wgpu_lib"
           if [[ "$wgpu_archs" == *"arm64"* ]]; then
             echo "VIVID_OSX_ARCH=arm64" >> $GITHUB_ENV
           elif [[ "$wgpu_archs" == *"x86_64"* ]]; then
