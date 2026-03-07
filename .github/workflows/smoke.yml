@@ -22,7 +22,7 @@ jobs:
         run: rm -rf ${{ github.workspace }}/../vivid/build
 
       - name: Configure vivid-core
-        run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=arm64
 
       - name: Create app bundle skeleton
         run: mkdir -p ${{ github.workspace }}/../vivid/build/vivid.app/Contents/PlugIns
