@@ -18,25 +18,17 @@ jobs:
           rm -rf ${{ github.workspace }}/../vivid
           git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
 
+      - name: Reset vivid-core build dir
+        run: rm -rf ${{ github.workspace }}/../vivid/build
+
       - name: Detect build arch
         run: |
-          wgpu_lib=$(find "${{ github.workspace }}/../vivid/build/_deps" -type f -name libwgpu_native.dylib 2>/dev/null | head -n 1)
-          if [ -z "$wgpu_lib" ]; then
-            echo "Failed to locate libwgpu_native.dylib in vivid-core build" >&2
-            find "${{ github.workspace }}/../vivid/build/_deps" -maxdepth 3 -type f | sed -n '1,120p' >&2
-            exit 1
-          fi
-          wgpu_archs=$(lipo -archs "$wgpu_lib")
-          echo "Using libwgpu_native: $wgpu_lib"
-          if [[ "$wgpu_archs" == *"arm64"* ]]; then
+          rust_host=$(rustc -vV | awk '/host:/ {print $2}')
+          if [[ "$rust_host" == aarch64-* ]]; then
             echo "VIVID_OSX_ARCH=arm64" >> $GITHUB_ENV
-          elif [[ "$wgpu_archs" == *"x86_64"* ]]; then
-            echo "VIVID_OSX_ARCH=x86_64" >> $GITHUB_ENV
           else
-            echo "Unsupported libwgpu_native architectures: $wgpu_archs" >&2
-            exit 1
+            echo "VIVID_OSX_ARCH=x86_64" >> $GITHUB_ENV
           fi
-          echo "Detected libwgpu_native arch(s): $wgpu_archs"
 
       - name: Configure vivid-core
         run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }}
