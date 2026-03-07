@@ -27,35 +27,37 @@ target_include_directories(vivid_operator_api INTERFACE
 )
 
 # --- WebGPU discovery ---
-# Find the wgpu include/lib directories in the vivid build tree
+# Prefer the host runtime's libwgpu_native to avoid loading a second WebGPU
+# runtime in package plugins.
 set(_wgpu_include "")
 set(_wgpu_lib_dir "")
-set(_deps_dir "${VIVID_BUILD_DIR}/_deps")
-if(IS_DIRECTORY "${_deps_dir}")
-    file(GLOB _dep_entries "${_deps_dir}/*")
-    foreach(_entry ${_dep_entries})
-        get_filename_component(_entry_name "${_entry}" NAME)
-        if(_entry_name MATCHES "wgpu.*-src")
-            if(EXISTS "${_entry}/include/webgpu/webgpu.h")
-                set(_wgpu_include "${_entry}/include")
-                if(IS_DIRECTORY "${_entry}/lib")
+
+if(EXISTS "${VIVID_SRC_DIR}/include/webgpu/webgpu.h")
+    set(_wgpu_include "${VIVID_SRC_DIR}/include")
+endif()
+
+if(EXISTS "${VIVID_BUILD_DIR}/vivid.app/Contents/MacOS/libwgpu_native.dylib")
+    set(_wgpu_lib_dir "${VIVID_BUILD_DIR}/vivid.app/Contents/MacOS")
+elseif(EXISTS "${VIVID_BUILD_DIR}/libwgpu_native.dylib")
+    set(_wgpu_lib_dir "${VIVID_BUILD_DIR}")
+endif()
+
+# Fallback for unusual build trees
+if(_wgpu_include STREQUAL "" OR _wgpu_lib_dir STREQUAL "")
+    set(_deps_dir "${VIVID_BUILD_DIR}/_deps")
+    if(IS_DIRECTORY "${_deps_dir}")
+        file(GLOB _dep_entries "${_deps_dir}/*")
+        foreach(_entry ${_dep_entries})
+            get_filename_component(_entry_name "${_entry}" NAME)
+            if(_entry_name MATCHES "wgpu.*-src")
+                if(_wgpu_include STREQUAL "" AND EXISTS "${_entry}/include/webgpu/webgpu.h")
+                    set(_wgpu_include "${_entry}/include")
+                endif()
+                if(_wgpu_lib_dir STREQUAL "" AND IS_DIRECTORY "${_entry}/lib")
                     set(_wgpu_lib_dir "${_entry}/lib")
                 endif()
             endif()
-        endif()
-    endforeach()
-endif()
-
-# Fallback: SDK include in vivid source dir
-if(_wgpu_include STREQUAL "")
-    if(EXISTS "${VIVID_SRC_DIR}/include/webgpu/webgpu.h")
-        set(_wgpu_include "${VIVID_SRC_DIR}/include")
-    endif()
-endif()
-# Fallback: libwgpu_native next to the build dir
-if(_wgpu_lib_dir STREQUAL "")
-    if(EXISTS "${VIVID_BUILD_DIR}/libwgpu_native.dylib")
-        set(_wgpu_lib_dir "${VIVID_BUILD_DIR}")
+        endforeach()
     endif()
 endif()
 
@@ -64,12 +66,16 @@ if(NOT _wgpu_include STREQUAL "")
     target_include_directories(webgpu INTERFACE "${_wgpu_include}")
 endif()
 if(NOT _wgpu_lib_dir STREQUAL "")
-    find_library(WGPU_NATIVE_LIB wgpu_native PATHS "${_wgpu_lib_dir}" NO_DEFAULT_PATH)
+    if(EXISTS "${_wgpu_lib_dir}/libwgpu_native.dylib")
+        set(WGPU_NATIVE_LIB "${_wgpu_lib_dir}/libwgpu_native.dylib")
+    else()
+        unset(WGPU_NATIVE_LIB CACHE)
+        find_library(WGPU_NATIVE_LIB wgpu_native PATHS "${_wgpu_lib_dir}" NO_DEFAULT_PATH)
+    endif()
     if(WGPU_NATIVE_LIB)
         target_link_libraries(webgpu INTERFACE "${WGPU_NATIVE_LIB}")
     endif()
 endif()
-
 # --- Platform plugin suffix ---
 if(APPLE)
     set(VIVID_PLUGIN_SUFFIX ".dylib")
@@ -83,13 +89,23 @@ endif()
 function(add_3d_operator name source)
     cmake_parse_arguments(ARG "" "" "EXTRA_LIBS;EXTRA_INCLUDES" ${ARGN})
     add_library(${name} MODULE ${source})
-    set_target_properties(${name} PROPERTIES PREFIX "" SUFFIX "${VIVID_PLUGIN_SUFFIX}")
+    if(APPLE)
+        set(_target_suffix ".dylib")
+    elseif(WIN32)
+        set(_target_suffix ".dll")
+    else()
+        set(_target_suffix ".so")
+    endif()
+    set_target_properties(${name} PROPERTIES
+        PREFIX ""
+        OUTPUT_NAME "${name}"
+        SUFFIX "${_target_suffix}"
+    )
     target_link_libraries(${name} PRIVATE vivid_operator_api webgpu ${ARG_EXTRA_LIBS})
     if(ARG_EXTRA_INCLUDES)
         target_include_directories(${name} PRIVATE ${ARG_EXTRA_INCLUDES})
     endif()
 endfunction()
-
 # --- 3D operator plugins ---
 add_3d_operator(render_3d     operators/gpu/render_3d/render_3d.cpp)
 add_3d_operator(shape3d       operators/gpu/shape3d/shape3d.cpp)
