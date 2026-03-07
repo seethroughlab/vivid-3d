@@ -18,17 +18,27 @@ jobs:
           rm -rf ${{ github.workspace }}/../vivid
           git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
 
+      - name: Detect host arch
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "VIVID_OSX_ARCH=arm64" >> $GITHUB_ENV
+            echo "VIVID_CARGO_TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
+          else
+            echo "VIVID_OSX_ARCH=x86_64" >> $GITHUB_ENV
+            echo "VIVID_CARGO_TARGET=x86_64-apple-darwin" >> $GITHUB_ENV
+          fi
+
       - name: Configure vivid-core
-        run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=arm64
+        run: cmake -B ${{ github.workspace }}/../vivid/build -S ${{ github.workspace }}/../vivid -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }}
 
       - name: Create app bundle skeleton
         run: mkdir -p ${{ github.workspace }}/../vivid/build/vivid.app/Contents/PlugIns
 
       - name: Build test_demo_graphs and vivid core operators
-        run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
+        run: CARGO_BUILD_TARGET=${{ env.VIVID_CARGO_TARGET }} cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
 
       - name: Configure package
-        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=arm64 -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
+        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }} -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
 
       - name: Build operators
         run: cmake --build build --target operators -j$(sysctl -n hw.logicalcpu)
