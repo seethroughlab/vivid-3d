@@ -125,6 +125,7 @@ add_3d_operator(material3d    operators/gpu/material3d/material3d.cpp)
 add_3d_operator(ssao3d        operators/gpu/ssao3d/ssao3d.cpp)
 add_3d_operator(dof3d         operators/gpu/dof3d/dof3d.cpp)
 add_3d_operator(environment3d operators/gpu/environment3d/environment3d.cpp)
+add_3d_operator(orbit_camera  operators/control/orbit_camera/orbit_camera.cpp)
 
 # --- Manifold (CSG Boolean library) ---
 include(FetchContent)
@@ -146,7 +147,7 @@ add_3d_operator(boolean3d operators/gpu/boolean3d/boolean3d.cpp EXTRA_LIBS manif
 add_custom_target(operators DEPENDS
     render_3d shape3d transform3d scene_merge light3d mesh_import
     deformer instancer3d particles3d sdf3d material3d ssao3d dof3d
-    environment3d boolean3d)
+    environment3d boolean3d orbit_camera)
 
 # --- Tests ---
 if(VIVID_PACKAGE_BUILD_TESTS)

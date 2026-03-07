@@ -197,11 +197,11 @@ static void generate_torus(std::vector<vivid::gpu::Vertex3D>& verts,
             uint32_t c = static_cast<uint32_t>((i + 1) * (sides + 1) + j);
             uint32_t d = c + 1;
             indices.push_back(a);
-            indices.push_back(c);
-            indices.push_back(d);
-            indices.push_back(a);
-            indices.push_back(d);
             indices.push_back(b);
+            indices.push_back(c);
+            indices.push_back(b);
+            indices.push_back(d);
+            indices.push_back(c);
         }
     }
 }

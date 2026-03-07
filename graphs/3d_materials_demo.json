@@ -8,7 +8,8 @@
     "mat_toon":       { "type": "Material3D", "params": { "shading": 1.0, "toon_levels": 4.0, "color_r": 0.3, "color_g": 0.7, "color_b": 1.0 } },
     "light":          { "type": "Light3D", "params": { "type": 0, "intensity": 1.5 } },
     "merge":          { "type": "SceneMerge" },
-    "render":         { "type": "Render3D", "params": { "cam_z": 8.0, "cam_y": 1.5 } },
+    "orbit_cam":      { "type": "OrbitCamera", "params": { "distance": 8.1, "azimuth": 0, "elevation": 11 } },
+    "render":         { "type": "Render3D" },
     "vout":           { "type": "video_out" }
   },
   "connections": [
@@ -20,6 +21,12 @@
     { "from": "mat_toon/scene",       "to": "merge/scene_c" },
     { "from": "light/scene",          "to": "merge/scene_d" },
     { "from": "merge/scene",          "to": "render/scene" },
+    { "from": "orbit_cam/cam_x",      "to": "render/cam_x" },
+    { "from": "orbit_cam/cam_y",      "to": "render/cam_y" },
+    { "from": "orbit_cam/cam_z",      "to": "render/cam_z" },
+    { "from": "orbit_cam/target_x",   "to": "render/target_x" },
+    { "from": "orbit_cam/target_y",   "to": "render/target_y" },
+    { "from": "orbit_cam/target_z",   "to": "render/target_z" },
     { "from": "render/texture",       "to": "vout/input" }
   ]
 }

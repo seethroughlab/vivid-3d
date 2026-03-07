@@ -1,19 +1,125 @@
 {
-  "nodes": {
-    "cube":    { "type": "Shape3D", "params": { "shape": 0, "pos_x": -2.5, "r": 0.2, "g": 0.6, "b": 1.0 } },
-    "sphere":  { "type": "Shape3D", "params": { "shape": 1, "pos_x": 0.0,  "r": 1.0, "g": 0.4, "b": 0.2 } },
-    "torus":   { "type": "Shape3D", "params": { "shape": 2, "pos_x": 2.5,  "r": 0.3, "g": 1.0, "b": 0.4 } },
-    "light":   { "type": "Light3D", "params": { "type": 0, "intensity": 1.2 } },
-    "merge":   { "type": "SceneMerge" },
-    "render":  { "type": "Render3D", "params": { "cam_z": 8.0, "cam_y": 2.0 } },
-    "vout":    { "type": "video_out" }
-  },
-  "connections": [
-    { "from": "cube/scene",    "to": "merge/scene_a" },
-    { "from": "sphere/scene",  "to": "merge/scene_b" },
-    { "from": "torus/scene",   "to": "merge/scene_c" },
-    { "from": "light/scene",   "to": "merge/scene_d" },
-    { "from": "merge/scene",   "to": "render/scene" },
-    { "from": "render/texture", "to": "vout/input" }
-  ]
+    "nodes": {
+        "cube": {
+            "type": "Shape3D",
+            "params": {
+                "r": 0.20000000298023224,
+                "pos_x": -2.5,
+                "b": 1.0,
+                "g": 0.6000000238418579,
+                "shape": 0.0
+            }
+        },
+        "sphere": {
+            "type": "Shape3D",
+            "params": {
+                "r": 1.0,
+                "pos_x": 0.0,
+                "b": 0.20000000298023224,
+                "g": 0.4000000059604645,
+                "shape": 1.0
+            }
+        },
+        "torus": {
+            "type": "Shape3D",
+            "params": {
+                "r": 0.30000001192092896,
+                "pos_x": 2.5,
+                "b": 0.4000000059604645,
+                "g": 1.0,
+                "shape": 2.0
+            }
+        },
+        "light": {
+            "type": "Light3D",
+            "params": {
+                "intensity": 1.2000000476837158,
+                "type": 0.0
+            }
+        },
+        "merge": {
+            "type": "SceneMerge",
+            "layout": {
+                "x": 230.0,
+                "y": 400.0
+            }
+        },
+        "orbit_cam": {
+            "type": "OrbitCamera",
+            "params": {
+                "distance": 5.0,
+                "azimuth": -36,
+                "elevation": 1.4
+            }
+        },
+        "render": {
+            "type": "Render3D",
+            "layout": {
+                "x": 430.0,
+                "y": 418.0
+            },
+            "resolution": [
+                1920,
+                1080
+            ]
+        },
+        "vout": {
+            "type": "video_out"
+        }
+    },
+    "connections": [
+        {
+            "from": "cube/scene",
+            "to": "merge/scene_a"
+        },
+        {
+            "from": "sphere/scene",
+            "to": "merge/scene_b"
+        },
+        {
+            "from": "torus/scene",
+            "to": "merge/scene_c"
+        },
+        {
+            "from": "light/scene",
+            "to": "merge/scene_d"
+        },
+        {
+            "from": "merge/scene",
+            "to": "render/scene"
+        },
+        {
+            "from": "orbit_cam/cam_x",
+            "to": "render/cam_x"
+        },
+        {
+            "from": "orbit_cam/cam_y",
+            "to": "render/cam_y"
+        },
+        {
+            "from": "orbit_cam/cam_z",
+            "to": "render/cam_z"
+        },
+        {
+            "from": "orbit_cam/target_x",
+            "to": "render/target_x"
+        },
+        {
+            "from": "orbit_cam/target_y",
+            "to": "render/target_y"
+        },
+        {
+            "from": "orbit_cam/target_z",
+            "to": "render/target_z"
+        },
+        {
+            "from": "render/texture",
+            "to": "vout/input"
+        }
+    ],
+    "viewport": {
+        "pan_x": 313.1322326660156,
+        "pan_y": 109.7188491821289,
+        "zoom": 0.694665253162384
+    }
 }
