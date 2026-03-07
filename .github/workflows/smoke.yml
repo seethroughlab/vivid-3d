@@ -18,14 +18,13 @@ jobs:
           rm -rf ${{ github.workspace }}/../vivid
           git clone --recurse-submodules https://github.com/seethroughlab/vivid.git ${{ github.workspace }}/../vivid
 
-      - name: Detect host arch
+      - name: Detect build arch
         run: |
-          if [ "$(uname -m)" = "arm64" ]; then
+          rust_host=$(rustc -vV | awk '/host:/ {print $2}')
+          if [[ "$rust_host" == aarch64-* ]]; then
             echo "VIVID_OSX_ARCH=arm64" >> $GITHUB_ENV
-            echo "VIVID_CARGO_TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
           else
             echo "VIVID_OSX_ARCH=x86_64" >> $GITHUB_ENV
-            echo "VIVID_CARGO_TARGET=x86_64-apple-darwin" >> $GITHUB_ENV
           fi
 
       - name: Configure vivid-core
@@ -35,7 +34,7 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/../vivid/build/vivid.app/Contents/PlugIns
 
       - name: Build test_demo_graphs and vivid core operators
-        run: CARGO_BUILD_TARGET=${{ env.VIVID_CARGO_TARGET }} cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
+        run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
 
       - name: Configure package
         run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }} -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
