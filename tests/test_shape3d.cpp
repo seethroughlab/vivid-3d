@@ -185,6 +185,14 @@ static std::vector<uint8_t> readback_texture(WGPUDevice device, WGPUQueue queue,
     return pixels;
 }
 
+static bool pixels_differ(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
+    if (a.size() != b.size() || a.empty()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i]) return true;
+    }
+    return false;
+}
+
 // Tick scheduler with GPU state and submit
 static void tick_and_submit(vivid::Scheduler& sched, HeadlessGpu& gpu,
                             WGPUTextureFormat format) {
@@ -631,7 +639,12 @@ int main() {
 
     vivid::OperatorRegistry registry;
     check(registry.scan(staging.c_str()), "registry.scan() succeeds");
-    check(registry.find("Shape3D") != nullptr, "Shape3D registered");
+    auto* shape_loader = registry.find("Shape3D");
+    check(shape_loader != nullptr, "Shape3D registered");
+    if (shape_loader) {
+        check(shape_loader->has_draw_thumbnail(),
+              "Shape3D exports thumbnail draw callback");
+    }
     check(registry.find("Render3D") != nullptr, "Render3D registered");
 
     std::fprintf(stderr, "\n=== GPU init ===\n");
@@ -657,6 +670,48 @@ int main() {
         }
         return {};
     };
+
+    // -----------------------------------------------------------------
+    // GPU Test: runtime shape switch (cube -> cylinder) changes output
+    // -----------------------------------------------------------------
+    std::fprintf(stderr, "\n=== GPU Test: Shape3D runtime shape switch ===\n");
+    {
+        constexpr uint32_t W = 64, H = 64;
+
+        vivid::Graph g;
+        g.add_node("s1", "Shape3D", {{"shape", 0.0f}, {"rot_y", 0.6f}});
+        g.add_node("r1", "Render3D");
+        g.add_connection("s1", "scene", "r1", "scene");
+
+        vivid::Scheduler sched;
+        check(sched.build(g, registry), "build succeeds");
+        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+
+        tick_and_submit(sched, gpu, kFormat);
+        auto cube_pixels = get_center_pixel(sched, W, H, "r1");
+        check(!cube_pixels.empty(), "cube frame readback returned pixels");
+
+        auto* ns = sched.find_node_mut("s1");
+        check(ns != nullptr, "found Shape3D node state");
+        if (ns) {
+            auto it = ns->param_indices.find("shape");
+            check(it != ns->param_indices.end(), "shape param index exists");
+            if (it != ns->param_indices.end()) {
+                ns->param_values[it->second] = 4.0f;  // cylinder
+            }
+        }
+
+        tick_and_submit(sched, gpu, kFormat);
+        auto cyl_pixels = get_center_pixel(sched, W, H, "r1");
+        check(!cyl_pixels.empty(), "cylinder frame readback returned pixels");
+
+        if (!cube_pixels.empty() && !cyl_pixels.empty()) {
+            check(pixels_differ(cube_pixels, cyl_pixels),
+                  "runtime shape switch changes rendered output");
+        }
+
+        sched.shutdown();
+    }
 
     // -----------------------------------------------------------------
     // GPU Test: Shape3D(cube) → Render3D — center pixel is non-black

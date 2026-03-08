@@ -1,0 +1,93 @@
+{
+  "nodes": {
+    "shape": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 0,
+        "pos_y": 0.0,
+        "scale_x": 1.8,
+        "scale_y": 1.8,
+        "scale_z": 1.8,
+        "rot_y": 0.6
+      }
+    },
+    "mat": {
+      "type": "Material3D",
+      "params": {
+        "roughness": 0.72,
+        "metallic": 0.58,
+        "color_r": 1.0,
+        "color_g": 1.0,
+        "color_b": 1.0,
+        "color_a": 1.0
+      }
+    },
+    "albedo": {
+      "type": "MovieFileIn",
+      "params": {
+        "file": "../assets/oxidized-metal-clad-bl/oxidized-metal-clad_albedo.png"
+      }
+    },
+    "normal": {
+      "type": "MovieFileIn",
+      "params": {
+        "file": "../assets/oxidized-metal-clad-bl/oxidized-metal-clad_normal-ogl.png"
+      }
+    },
+    "light": {
+      "type": "Light3D",
+      "params": {
+        "type": 0,
+        "intensity": 1.5,
+        "rot_x": -38.0,
+        "rot_y": 28.0
+      }
+    },
+    "hdri": {
+      "type": "MovieFileIn",
+      "params": {
+        "file": "../assets/env.png"
+      }
+    },
+    "env": {
+      "type": "Environment3D",
+      "params": {
+        "intensity": 0.7
+      }
+    },
+    "merge": {
+      "type": "SceneMerge"
+    },
+    "orbit_cam": {
+      "type": "OrbitCamera",
+      "params": {
+        "distance": 2.8,
+        "azimuth": 24.0,
+        "elevation": 12.0
+      }
+    },
+    "render": {
+      "type": "Render3D"
+    },
+    "vout": {
+      "type": "video_out"
+    }
+  },
+  "connections": [
+    { "from": "shape/scene", "to": "mat/scene" },
+    { "from": "albedo/texture", "to": "mat/albedo_map" },
+    { "from": "normal/texture", "to": "mat/normal_map" },
+    { "from": "mat/scene", "to": "merge/scene_a" },
+    { "from": "light/scene", "to": "merge/scene_b" },
+    { "from": "hdri/texture", "to": "env/hdri" },
+    { "from": "env/scene", "to": "merge/scene_c" },
+    { "from": "merge/scene", "to": "render/scene" },
+    { "from": "orbit_cam/cam_x", "to": "render/cam_x" },
+    { "from": "orbit_cam/cam_y", "to": "render/cam_y" },
+    { "from": "orbit_cam/cam_z", "to": "render/cam_z" },
+    { "from": "orbit_cam/target_x", "to": "render/target_x" },
+    { "from": "orbit_cam/target_y", "to": "render/target_y" },
+    { "from": "orbit_cam/target_z", "to": "render/target_z" },
+    { "from": "render/texture", "to": "vout/input" }
+  ]
+}

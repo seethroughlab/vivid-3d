@@ -1,0 +1,151 @@
+{
+    "nodes": {
+        "shape": {
+            "type": "Shape3D",
+            "params": {
+                "rot_y": 0.6000000238418579,
+                "scale_z": 1.7999999523162842,
+                "scale_y": 1.7999999523162842,
+                "scale_x": 1.7999999523162842,
+                "shape": 0.0,
+                "pos_y": 0.0
+            }
+        },
+        "mat": {
+            "type": "Material3D",
+            "params": {
+                "roughness": 0.36000001430511475,
+                "metallic": 0.8399999737739563,
+                "color_g": 1.0,
+                "color_b": 1.0,
+                "color_r": 1.0,
+                "color_a": 1.0
+            }
+        },
+        "albedo": {
+            "type": "MovieFileIn",
+            "params": {
+                "file": "../assets/streaky-metal1-bl/streaky-metal1_albedo.png"
+            }
+        },
+        "normal": {
+            "type": "MovieFileIn",
+            "params": {
+                "file": "../assets/streaky-metal1-bl/streaky-metal1_normal-ogl.png"
+            }
+        },
+        "light": {
+            "type": "Light3D",
+            "params": {
+                "type": 0.0,
+                "intensity": 1.600000023841858,
+                "rot_x": -35.0,
+                "rot_y": 35.0
+            }
+        },
+        "hdri": {
+            "type": "MovieFileIn",
+            "params": {
+                "file": "../assets/env.png"
+            }
+        },
+        "env": {
+            "type": "Environment3D",
+            "params": {
+                "intensity": 0.800000011920929
+            }
+        },
+        "merge": {
+            "type": "SceneMerge"
+        },
+        "orbit_cam": {
+            "type": "OrbitCamera",
+            "params": {
+                "distance": 2.799999952316284,
+                "azimuth": -20.0,
+                "elevation": 10.0
+            }
+        },
+        "render": {
+            "type": "Render3D",
+            "layout": {
+                "x": 630.0,
+                "y": 373.0
+            },
+            "resolution": [
+                1920,
+                1080
+            ]
+        },
+        "vout": {
+            "type": "video_out"
+        }
+    },
+    "connections": [
+        {
+            "from": "shape/scene",
+            "to": "mat/scene"
+        },
+        {
+            "from": "albedo/texture",
+            "to": "mat/albedo_map"
+        },
+        {
+            "from": "normal/texture",
+            "to": "mat/normal_map"
+        },
+        {
+            "from": "mat/scene",
+            "to": "merge/scene_a"
+        },
+        {
+            "from": "light/scene",
+            "to": "merge/scene_b"
+        },
+        {
+            "from": "hdri/texture",
+            "to": "env/hdri"
+        },
+        {
+            "from": "env/scene",
+            "to": "merge/scene_c"
+        },
+        {
+            "from": "merge/scene",
+            "to": "render/scene"
+        },
+        {
+            "from": "orbit_cam/cam_x",
+            "to": "render/cam_x"
+        },
+        {
+            "from": "orbit_cam/cam_y",
+            "to": "render/cam_y"
+        },
+        {
+            "from": "orbit_cam/cam_z",
+            "to": "render/cam_z"
+        },
+        {
+            "from": "orbit_cam/target_x",
+            "to": "render/target_x"
+        },
+        {
+            "from": "orbit_cam/target_y",
+            "to": "render/target_y"
+        },
+        {
+            "from": "orbit_cam/target_z",
+            "to": "render/target_z"
+        },
+        {
+            "from": "render/texture",
+            "to": "vout/input"
+        }
+    ],
+    "viewport": {
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "zoom": 1.0
+    }
+}

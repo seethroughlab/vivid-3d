@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include <vector>
 #include <filesystem>
 
@@ -310,14 +311,14 @@ int main() {
         }
     }
 
-    bool has_fog_deps = true;
-    const char* fog_dylibs[] = { "shape3d.dylib", "light3d.dylib", "scene_merge.dylib" };
-    for (auto* name : fog_dylibs) {
+    bool has_scene_deps = true;
+    const char* scene_dylibs[] = { "shape3d.dylib", "light3d.dylib", "scene_merge.dylib", "material3d.dylib" };
+    for (auto* name : scene_dylibs) {
         if (std::filesystem::exists(name)) {
             std::filesystem::copy_file(name, staging + "/" + name,
                 std::filesystem::copy_options::overwrite_existing);
         } else {
-            has_fog_deps = false;
+            has_scene_deps = false;
         }
     }
 
@@ -434,9 +435,53 @@ int main() {
         sched.shutdown();
     }
 
-    if (!has_fog_deps) {
-        skip("shape3d/light3d/scene_merge dylibs not found — skipping fog tests");
+    if (!has_scene_deps) {
+        skip("shape3d/light3d/scene_merge/material3d dylibs not found — skipping textured/fog tests");
     } else {
+        std::fprintf(stderr, "\n=== GPU Test: Textured material keeps opaque alpha ===\n");
+        {
+            constexpr uint32_t W = 128, H = 128;
+
+            vivid::Graph g;
+            g.add_node("shape", "Shape3D", {{"shape", 0.0f}, {"scale", 1.8f}});
+            g.add_node("mat", "Material3D", {
+                {"color_r", 1.0f}, {"color_g", 1.0f}, {"color_b", 1.0f}, {"color_a", 1.0f}
+            });
+            g.add_node("light", "Light3D", {
+                {"type", 0.0f}, {"intensity", 1.8f}, {"dir_x", -0.5f}, {"dir_y", -1.0f}, {"dir_z", -0.3f}
+            });
+            g.add_node("merge", "SceneMerge");
+            g.add_node("r1", "Render3D", {
+                {"cam_y", 1.1f}, {"cam_z", 4.3f}, {"target_y", 0.0f}, {"target_z", 0.0f},
+                {"bg_a", 1.0f}
+            });
+
+            g.add_connection("shape", "scene", "mat", "scene");
+            g.add_connection("mat", "scene", "merge", "scene_a");
+            g.add_connection("light", "scene", "merge", "scene_b");
+            g.add_connection("merge", "scene", "r1", "scene");
+
+            vivid::Scheduler sched;
+            check(sched.build(g, registry), "textured opacity scene build succeeds");
+            sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+            tick_and_submit(sched, gpu, kFormat);
+
+            std::vector<uint8_t> pixels;
+            for (auto& ns : sched.nodes_mut()) {
+                if (ns.node_id == "r1" && ns.gpu_texture) {
+                    pixels = readback_texture(gpu.device, gpu.queue, ns.gpu_texture, W, H);
+                    break;
+                }
+            }
+            check(!pixels.empty(), "textured opacity readback succeeded");
+            if (!pixels.empty()) {
+                uint8_t min_a = 255;
+                for (size_t i = 3; i < pixels.size(); i += 4) min_a = std::min(min_a, pixels[i]);
+                check(min_a == 255, "textured path keeps alpha fully opaque when color_a = 1");
+            }
+            sched.shutdown();
+        }
+
         auto render_scene = [&](float fog_enabled, float fog_mode, float fog_near,
                                 float fog_far, float fog_density) -> std::vector<uint8_t> {
             constexpr uint32_t W = 128, H = 128;

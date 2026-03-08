@@ -531,7 +531,9 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Material params modulated by textures
     let base_color = material.color.rgb * albedo_tex.rgb;
-    let alpha      = material.color.a * albedo_tex.a;
+    // Treat PBR textured surfaces as opaque by default; many albedo maps
+    // are authored without meaningful alpha and can cause unintended see-through.
+    let alpha      = material.color.a;
     let roughness  = material.roughness * rm_tex.r;
     let metallic   = material.metallic + rm_tex.g;  // additive — rm_tex.g=0 by default
     let emit_color = base_color * material.emission * max(emit_tex.r, max(emit_tex.g, emit_tex.b));
@@ -843,7 +845,9 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Material params modulated by textures
     let base_color = material.color.rgb * albedo_tex.rgb;
-    let alpha      = material.color.a * albedo_tex.a;
+    // Treat PBR textured surfaces as opaque by default; many albedo maps
+    // are authored without meaningful alpha and can cause unintended see-through.
+    let alpha      = material.color.a;
     let roughness  = material.roughness * rm_tex.r;
     let metallic   = material.metallic + rm_tex.g;
     let emit_color = base_color * material.emission * max(emit_tex.r, max(emit_tex.g, emit_tex.b));
