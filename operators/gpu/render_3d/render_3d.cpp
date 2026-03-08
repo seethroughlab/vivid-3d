@@ -24,6 +24,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera3D;
@@ -32,6 +38,22 @@ struct Material {
 @group(0) @binding(3) var<uniform> shadow: ShadowData;
 @group(0) @binding(4) var shadow_cmp_sampler: sampler_comparison;
 @group(0) @binding(5) var dir_shadow_map: texture_depth_2d;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 @vertex
 fn vs_main(@location(0) pos: vec3f,
@@ -82,7 +104,8 @@ fn fs_main(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Unlit early-out
     if (material.flags > 0.5) {
-        return vec4f(base_color * (1.0 + material.emission), alpha);
+        let unlit_color = apply_fog(base_color * (1.0 + material.emission), in.world_pos);
+        return vec4f(unlit_color, alpha);
     }
 
     let N = normalize(in.normal);
@@ -110,6 +133,7 @@ fn fs_main(in: Vertex3DOutput) -> @location(0) vec4f {
     // Emission
     color += base_color * material.emission;
 
+    color = apply_fog(color, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -129,6 +153,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 struct InstanceData {
@@ -144,6 +174,22 @@ struct InstanceData {
 @group(0) @binding(4) var shadow_cmp_sampler: sampler_comparison;
 @group(0) @binding(5) var dir_shadow_map: texture_depth_2d;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 struct InstancedOutput {
     @builtin(position) position: vec4f,
@@ -275,7 +321,8 @@ fn fs_instanced(in: InstancedOutput) -> @location(0) vec4f {
 
     // Unlit early-out
     if (material.flags > 0.5) {
-        return vec4f(base_color * (1.0 + material.emission), alpha);
+        let unlit_color = apply_fog(base_color * (1.0 + material.emission), in.world_pos);
+        return vec4f(unlit_color, alpha);
     }
 
     let N = normalize(in.normal);
@@ -303,6 +350,7 @@ fn fs_instanced(in: InstancedOutput) -> @location(0) vec4f {
     // Emission
     color += base_color * material.emission;
 
+    color = apply_fog(color, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -322,6 +370,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 struct InstanceData {
@@ -337,6 +391,22 @@ struct InstanceData {
 @group(0) @binding(4) var shadow_cmp_sampler: sampler_comparison;
 @group(0) @binding(5) var dir_shadow_map: texture_depth_2d;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 struct BillboardOutput {
     @builtin(position) position: vec4f,
@@ -385,7 +455,8 @@ fn fs_billboard(in: BillboardOutput) -> @location(0) vec4f {
     let dist = length(center) * 2.0;
     let alpha = in.color.a * saturate(1.0 - dist);
     if (alpha < 0.01) { discard; }
-    let color = in.color.rgb * (1.0 + material.emission);
+    let lit = in.color.rgb * (1.0 + material.emission);
+    let color = apply_fog(lit, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -405,6 +476,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera3D;
@@ -419,6 +496,22 @@ struct Material {
 @group(1) @binding(2) var normal_map: texture_2d<f32>;
 @group(1) @binding(3) var roughness_metallic_map: texture_2d<f32>;
 @group(1) @binding(4) var emission_map: texture_2d<f32>;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 @vertex
 fn vs_textured(@location(0) pos: vec3f,
@@ -445,7 +538,8 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Unlit early-out
     if (material.flags > 0.5) {
-        return vec4f(base_color + emit_color, alpha);
+        let unlit_color = apply_fog(base_color + emit_color, in.world_pos);
+        return vec4f(unlit_color, alpha);
     }
 
     // Normal mapping (TBN)
@@ -519,6 +613,7 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
     // Emission
     color += emit_color;
 
+    color = apply_fog(color, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -551,6 +646,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera3D;
@@ -559,6 +660,22 @@ struct Material {
 @group(0) @binding(3) var<uniform> shadow: ShadowData;
 @group(0) @binding(4) var shadow_cmp_sampler: sampler_comparison;
 @group(0) @binding(5) var dir_shadow_map: texture_depth_2d;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 @vertex
 fn vs_main(@location(0) pos: vec3f,
@@ -609,7 +726,8 @@ fn fs_main(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Unlit early-out
     if (material.flags > 0.5) {
-        return vec4f(base_color * (1.0 + material.emission), alpha);
+        let unlit_color = apply_fog(base_color * (1.0 + material.emission), in.world_pos);
+        return vec4f(unlit_color, alpha);
     }
 
     let N = normalize(in.normal);
@@ -650,6 +768,7 @@ fn fs_main(in: Vertex3DOutput) -> @location(0) vec4f {
     // Emission
     color += base_color * material.emission;
 
+    color = apply_fog(color, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -669,6 +788,12 @@ struct Material {
     toon_levels: f32,
     _pad0: f32,
     _pad1: f32,
+    fog_enabled: f32,
+    fog_mode: f32, // 0=Linear, 1=Exp2
+    fog_near: f32,
+    fog_far: f32,
+    fog_color: vec3f,
+    fog_density: f32,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera3D;
@@ -683,6 +808,22 @@ struct Material {
 @group(1) @binding(2) var normal_map: texture_2d<f32>;
 @group(1) @binding(3) var roughness_metallic_map: texture_2d<f32>;
 @group(1) @binding(4) var emission_map: texture_2d<f32>;
+
+fn apply_fog(color: vec3f, world_pos: vec3f) -> vec3f {
+    if (material.fog_enabled < 0.5) {
+        return color;
+    }
+    let dist = distance(camera.camera_pos, world_pos);
+    var fog_factor = 0.0;
+    if (material.fog_mode < 0.5) {
+        let denom = max(material.fog_far - material.fog_near, 0.0001);
+        fog_factor = saturate((dist - material.fog_near) / denom);
+    } else {
+        let x = dist * max(material.fog_density, 0.0);
+        fog_factor = 1.0 - exp(-(x * x));
+    }
+    return mix(color, material.fog_color, saturate(fog_factor));
+}
 
 @vertex
 fn vs_textured(@location(0) pos: vec3f,
@@ -709,7 +850,8 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
 
     // Unlit early-out
     if (material.flags > 0.5) {
-        return vec4f(base_color + emit_color, alpha);
+        let unlit_color = apply_fog(base_color + emit_color, in.world_pos);
+        return vec4f(unlit_color, alpha);
     }
 
     // Normal mapping (TBN)
@@ -795,6 +937,7 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
     // Emission
     color += emit_color;
 
+    color = apply_fog(color, in.world_pos);
     return vec4f(color, alpha);
 }
 )";
@@ -828,9 +971,15 @@ struct MaterialUniform {
     float flags;          //  4 bytes — >0.5 = unlit
     float shading_mode;   //  4 bytes — 0=default, 1=toon
     float toon_levels;    //  4 bytes — quantization bands
-    float _pad[2];        //  8 bytes — align to 48
+    float _pad[2];        //  8 bytes
+    float fog_enabled;    //  4 bytes
+    float fog_mode;       //  4 bytes — 0=Linear, 1=Exp2
+    float fog_near;       //  4 bytes
+    float fog_far;        //  4 bytes
+    float fog_color[3];   // 12 bytes
+    float fog_density;    //  4 bytes
 };
-static_assert(sizeof(MaterialUniform) == 48, "MaterialUniform must be 48 bytes");
+static_assert(sizeof(MaterialUniform) == 80, "MaterialUniform must be 80 bytes");
 
 struct LightData {
     float position_and_type[4];
@@ -1009,6 +1158,16 @@ struct Render3D : vivid::OperatorBase {
     vivid::Param<float> shadow_resolution {"shadow_resolution", 1024.0f, 256.0f, 4096.0f};
     vivid::Param<float> shadow_bias       {"shadow_bias",       0.005f, 0.0f, 0.05f};
 
+    // Fog params (opt-in)
+    vivid::Param<float> fog_enabled {"fog_enabled", 0.0f, 0.0f, 1.0f};
+    vivid::Param<int>   fog_mode    {"fog_mode",    0, {"Linear", "Exp2"}};
+    vivid::Param<float> fog_color_r {"fog_color_r", 0.12f, 0.0f, 1.0f};
+    vivid::Param<float> fog_color_g {"fog_color_g", 0.14f, 0.0f, 1.0f};
+    vivid::Param<float> fog_color_b {"fog_color_b", 0.18f, 0.0f, 1.0f};
+    vivid::Param<float> fog_near    {"fog_near",    4.0f, 0.0f, 1000.0f};
+    vivid::Param<float> fog_far     {"fog_far",     30.0f, 0.01f, 2000.0f};
+    vivid::Param<float> fog_density {"fog_density", 0.04f, 0.0f, 2.0f};
+
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         vivid::param_group(cam_x, "Camera");
         vivid::param_group(cam_y, "Camera");
@@ -1032,6 +1191,18 @@ struct Render3D : vivid::OperatorBase {
         vivid::param_group(shadow_resolution, "Shadows");
         vivid::param_group(shadow_bias, "Shadows");
 
+        vivid::param_group(fog_enabled, "Fog");
+        vivid::param_group(fog_mode, "Fog");
+        vivid::param_group(fog_color_r, "Fog");
+        vivid::param_group(fog_color_g, "Fog");
+        vivid::param_group(fog_color_b, "Fog");
+        vivid::param_group(fog_near, "Fog");
+        vivid::param_group(fog_far, "Fog");
+        vivid::param_group(fog_density, "Fog");
+        vivid::display_hint(fog_color_r, VIVID_DISPLAY_COLOR);
+        vivid::display_hint(fog_color_g, VIVID_DISPLAY_COLOR);
+        vivid::display_hint(fog_color_b, VIVID_DISPLAY_COLOR);
+
         out.push_back(&cam_x);
         out.push_back(&cam_y);
         out.push_back(&cam_z);
@@ -1048,6 +1219,14 @@ struct Render3D : vivid::OperatorBase {
         out.push_back(&shadow_enabled);
         out.push_back(&shadow_resolution);
         out.push_back(&shadow_bias);
+        out.push_back(&fog_enabled);
+        out.push_back(&fog_mode);
+        out.push_back(&fog_color_r);
+        out.push_back(&fog_color_g);
+        out.push_back(&fog_color_b);
+        out.push_back(&fog_near);
+        out.push_back(&fog_far);
+        out.push_back(&fog_density);
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
@@ -1320,6 +1499,14 @@ struct Render3D : vivid::OperatorBase {
             mat.flags        = mat_src->unlit ? 1.0f : 0.0f;
             mat.shading_mode = mat_src->shading_mode;
             mat.toon_levels  = mat_src->toon_levels;
+            mat.fog_enabled  = fog_enabled.value > 0.5f ? 1.0f : 0.0f;
+            mat.fog_mode     = static_cast<float>(fog_mode.int_value());
+            mat.fog_near     = fog_near.value;
+            mat.fog_far      = fog_far.value;
+            mat.fog_color[0] = fog_color_r.value;
+            mat.fog_color[1] = fog_color_g.value;
+            mat.fog_color[2] = fog_color_b.value;
+            mat.fog_density  = fog_density.value;
             wgpuQueueWriteBuffer(gpu->queue, material_ubo_,
                                  i * kMaterialSlotStride, &mat, sizeof(mat));
 

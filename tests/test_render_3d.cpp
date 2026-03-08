@@ -185,6 +185,25 @@ static std::vector<uint8_t> readback_texture(WGPUDevice device, WGPUQueue queue,
     return pixels;
 }
 
+static bool pixels_differ(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
+    if (a.size() != b.size() || a.empty()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i]) return true;
+    }
+    return false;
+}
+
+static float avg_channel(const std::vector<uint8_t>& pixels, uint32_t channel) {
+    if (pixels.empty() || channel > 3) return 0.0f;
+    double sum = 0.0;
+    size_t n = 0;
+    for (size_t i = channel; i < pixels.size(); i += 4) {
+        sum += static_cast<double>(pixels[i]) / 255.0;
+        ++n;
+    }
+    return n > 0 ? static_cast<float>(sum / static_cast<double>(n)) : 0.0f;
+}
+
 // Tick scheduler with GPU state and submit
 static void tick_and_submit(vivid::Scheduler& sched, HeadlessGpu& gpu,
                             WGPUTextureFormat format) {
@@ -282,10 +301,24 @@ int main() {
     std::string staging = "./.test_render3d_staging";
     std::filesystem::create_directories(staging);
     bool has_render3d = false;
-    if (std::filesystem::exists("render_3d.dylib")) {
-        std::filesystem::copy_file("render_3d.dylib", staging + "/render_3d.dylib",
-            std::filesystem::copy_options::overwrite_existing);
-        has_render3d = true;
+    const char* base_dylibs[] = { "render_3d.dylib" };
+    for (auto* name : base_dylibs) {
+        if (std::filesystem::exists(name)) {
+            std::filesystem::copy_file(name, staging + "/" + name,
+                std::filesystem::copy_options::overwrite_existing);
+            if (std::strcmp(name, "render_3d.dylib") == 0) has_render3d = true;
+        }
+    }
+
+    bool has_fog_deps = true;
+    const char* fog_dylibs[] = { "shape3d.dylib", "light3d.dylib", "scene_merge.dylib" };
+    for (auto* name : fog_dylibs) {
+        if (std::filesystem::exists(name)) {
+            std::filesystem::copy_file(name, staging + "/" + name,
+                std::filesystem::copy_options::overwrite_existing);
+        } else {
+            has_fog_deps = false;
+        }
     }
 
     if (!has_render3d) {
@@ -399,6 +432,90 @@ int main() {
         }
 
         sched.shutdown();
+    }
+
+    if (!has_fog_deps) {
+        skip("shape3d/light3d/scene_merge dylibs not found — skipping fog tests");
+    } else {
+        auto render_scene = [&](float fog_enabled, float fog_mode, float fog_near,
+                                float fog_far, float fog_density) -> std::vector<uint8_t> {
+            constexpr uint32_t W = 128, H = 128;
+            vivid::Graph g;
+            g.add_node("near_sphere", "Shape3D", {
+                {"shape", 1.0f}, {"pos_x", -1.0f}, {"pos_z", 0.0f},
+                {"r", 1.0f}, {"g", 0.25f}, {"b", 0.2f}
+            });
+            g.add_node("far_cube", "Shape3D", {
+                {"shape", 0.0f}, {"pos_x", 1.4f}, {"pos_z", -5.0f},
+                {"r", 0.95f}, {"g", 0.7f}, {"b", 0.15f}
+            });
+            g.add_node("light", "Light3D", {{"type", 0.0f}, {"intensity", 1.6f}});
+            g.add_node("merge", "SceneMerge");
+            g.add_node("r1", "Render3D", {
+                {"cam_y", 1.2f}, {"cam_z", 8.0f}, {"target_z", -2.0f},
+                {"bg_r", 0.03f}, {"bg_g", 0.04f}, {"bg_b", 0.06f},
+                {"fog_enabled", fog_enabled},
+                {"fog_mode", fog_mode},
+                {"fog_color_r", 0.45f}, {"fog_color_g", 0.55f}, {"fog_color_b", 0.85f},
+                {"fog_near", fog_near}, {"fog_far", fog_far}, {"fog_density", fog_density},
+            });
+            g.add_connection("near_sphere", "scene", "merge", "scene_a");
+            g.add_connection("far_cube", "scene", "merge", "scene_b");
+            g.add_connection("light", "scene", "merge", "scene_c");
+            g.add_connection("merge", "scene", "r1", "scene");
+
+            vivid::Scheduler sched;
+            check(sched.build(g, registry), "fog scene build succeeds");
+            sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+            tick_and_submit(sched, gpu, kFormat);
+
+            auto& nodes = sched.nodes_mut();
+            std::vector<uint8_t> out;
+            for (auto& ns : nodes) {
+                if (ns.node_id == "r1" && ns.gpu_texture) {
+                    out = readback_texture(gpu.device, gpu.queue, ns.gpu_texture, W, H);
+                    break;
+                }
+            }
+            sched.shutdown();
+            return out;
+        };
+
+        std::fprintf(stderr, "\n=== GPU Test: Fog enabled changes output ===\n");
+        {
+            auto no_fog = render_scene(0.0f, 0.0f, 2.0f, 14.0f, 0.03f);
+            auto linear_fog = render_scene(1.0f, 0.0f, 2.0f, 14.0f, 0.03f);
+            check(!no_fog.empty() && !linear_fog.empty(), "fog readbacks succeeded");
+            if (!no_fog.empty() && !linear_fog.empty()) {
+                check(pixels_differ(no_fog, linear_fog), "fog enabled output differs from fog disabled");
+            }
+        }
+
+        std::fprintf(stderr, "\n=== GPU Test: Linear fog near/far response ===\n");
+        {
+            auto strong_linear = render_scene(1.0f, 0.0f, 1.0f, 8.0f, 0.03f);
+            auto weak_linear   = render_scene(1.0f, 0.0f, 1.0f, 40.0f, 0.03f);
+            check(!strong_linear.empty() && !weak_linear.empty(), "linear fog readbacks succeeded");
+            if (!strong_linear.empty() && !weak_linear.empty()) {
+                float strong_b = avg_channel(strong_linear, 2);
+                float weak_b   = avg_channel(weak_linear, 2);
+                check(pixels_differ(strong_linear, weak_linear), "linear fog near/far changes output");
+                check(strong_b > weak_b, "smaller fog_far increases fog influence (higher blue average)");
+            }
+        }
+
+        std::fprintf(stderr, "\n=== GPU Test: Exp2 fog density response ===\n");
+        {
+            auto low_density  = render_scene(1.0f, 1.0f, 2.0f, 14.0f, 0.02f);
+            auto high_density = render_scene(1.0f, 1.0f, 2.0f, 14.0f, 0.12f);
+            check(!low_density.empty() && !high_density.empty(), "exp2 fog readbacks succeeded");
+            if (!low_density.empty() && !high_density.empty()) {
+                float low_b  = avg_channel(low_density, 2);
+                float high_b = avg_channel(high_density, 2);
+                check(pixels_differ(low_density, high_density), "exp2 density changes output");
+                check(high_b > low_b, "higher fog_density increases fog influence (higher blue average)");
+            }
+        }
     }
 
     // Cleanup

@@ -1,0 +1,56 @@
+{
+  "nodes": {
+    "seed_mesh": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 0,
+        "scale_x": 0.06,
+        "scale_y": 0.06,
+        "scale_z": 0.06,
+        "r": 1.0,
+        "g": 0.9,
+        "b": 0.7,
+        "roughness": 0.35,
+        "metallic": 0.0
+      }
+    },
+    "particles": {
+      "type": "Particles3D",
+      "params": {
+        "learning_mode": 1,
+        "count": 40000,
+        "emission_rate": 8000,
+        "lifetime": 4.5,
+        "speed": 2.5,
+        "gravity": -1.8,
+        "size": 0.05,
+        "bounds": 15.0,
+        "r": 0.95,
+        "g": 0.7,
+        "b": 0.35,
+        "a": 0.85,
+        "unlit": 1,
+        "emission": 0.8
+      }
+    },
+    "render": {
+      "type": "Render3D",
+      "params": {
+        "cam_y": 2.0,
+        "cam_z": 8.0,
+        "fov": 45.0,
+        "bg_r": 0.02,
+        "bg_g": 0.02,
+        "bg_b": 0.04
+      }
+    },
+    "vout": {
+      "type": "video_out"
+    }
+  },
+  "connections": [
+    { "from": "seed_mesh/scene", "to": "particles/scene" },
+    { "from": "particles/scene", "to": "render/scene" },
+    { "from": "render/texture", "to": "vout/input" }
+  ]
+}

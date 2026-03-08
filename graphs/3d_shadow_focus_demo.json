@@ -1,0 +1,74 @@
+{
+  "nodes": {
+    "floor": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 0,
+        "scale_x": 8.0,
+        "scale_y": 0.08,
+        "scale_z": 8.0,
+        "pos_y": -1.3,
+        "r": 0.75,
+        "g": 0.75,
+        "b": 0.75,
+        "roughness": 0.9,
+        "metallic": 0.0
+      }
+    },
+    "caster": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 0,
+        "pos_y": 0.2,
+        "pos_x": -0.8,
+        "scale_x": 1.1,
+        "scale_y": 1.1,
+        "scale_z": 1.1,
+        "r": 0.95,
+        "g": 0.35,
+        "b": 0.2,
+        "roughness": 0.35,
+        "metallic": 0.0
+      }
+    },
+    "light": {
+      "type": "Light3D",
+      "params": {
+        "type": 0,
+        "intensity": 1.8,
+        "pos_x": 5.0,
+        "pos_y": 6.0,
+        "pos_z": 3.0,
+        "r": 1.0,
+        "g": 0.98,
+        "b": 0.92
+      }
+    },
+    "merge": { "type": "SceneMerge" },
+    "render": {
+      "type": "Render3D",
+      "params": {
+        "cam_x": 4.0,
+        "cam_y": 2.6,
+        "cam_z": 7.0,
+        "target_x": -0.2,
+        "target_y": -0.4,
+        "target_z": -0.5,
+        "shadow_enabled": 1,
+        "shadow_resolution": 2048,
+        "shadow_bias": 0.004,
+        "bg_r": 0.04,
+        "bg_g": 0.04,
+        "bg_b": 0.05
+      }
+    },
+    "vout": { "type": "video_out" }
+  },
+  "connections": [
+    { "from": "floor/scene", "to": "merge/scene_a" },
+    { "from": "caster/scene", "to": "merge/scene_b" },
+    { "from": "light/scene", "to": "merge/scene_c" },
+    { "from": "merge/scene", "to": "render/scene" },
+    { "from": "render/texture", "to": "vout/input" }
+  ]
+}

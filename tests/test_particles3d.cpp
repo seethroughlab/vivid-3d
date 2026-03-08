@@ -227,7 +227,7 @@ int main() {
     static constexpr WGPUTextureFormat kFormat = WGPUTextureFormat_RGBA8Unorm;
 
     // =====================================================================
-    // CPU Test: ParamsData is 64 bytes
+    // CPU Test: ParamsData is 96 bytes
     // =====================================================================
     std::fprintf(stderr, "\n=== CPU Test: ParamsData size ===\n");
     {
@@ -244,11 +244,19 @@ int main() {
             float    size;
             float    color[4];
             uint32_t seed;
-            uint32_t _pad1;
-            uint32_t _pad2;
-            uint32_t _pad3;
+            uint32_t noise_octaves;
+            float    noise_scale;
+            float    noise_speed;
+            float    curl_strength;
+            float    drag;
+            float    time;
+            float    elongation;
+            uint32_t shape;
+            uint32_t learning_mode;
+            float    bounds;
+            float    _pad0;
         };
-        check(sizeof(ParamsData) == 64, "sizeof(ParamsData) == 64");
+        check(sizeof(ParamsData) == 96, "sizeof(ParamsData) == 96");
     }
 
     // =====================================================================
@@ -337,6 +345,7 @@ int main() {
 
         vivid::Graph g;
         g.add_node("p1", "Particles3D", {
+            {"learning_mode", 1.0f},
             {"count", 500.0f},
             {"emission_rate", 200.0f},
             {"speed", 3.0f},
@@ -375,14 +384,15 @@ int main() {
     }
 
     // -----------------------------------------------------------------
-    // GPU Test: Multi-frame evolution — pixel data changes
+    // GPU Test: Multi-frame evolution in beginner mode
     // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Multi-frame evolution ===\n");
+    std::fprintf(stderr, "\n=== GPU Test: Multi-frame evolution (beginner mode) ===\n");
     {
         constexpr uint32_t W = 64, H = 64;
 
         vivid::Graph g;
         g.add_node("p1", "Particles3D", {
+            {"learning_mode", 1.0f},
             {"count", 200.0f},
             {"emission_rate", 100.0f},
             {"speed", 3.0f},
@@ -421,6 +431,53 @@ int main() {
     }
 
     // -----------------------------------------------------------------
+    // GPU Test: Beginner gravity changes scene evolution
+    // -----------------------------------------------------------------
+    std::fprintf(stderr, "\n=== GPU Test: Beginner gravity sensitivity ===\n");
+    {
+        constexpr uint32_t W = 96, H = 96;
+
+        auto run_case = [&](float gval) -> std::vector<uint8_t> {
+            vivid::Graph g;
+            g.add_node("p1", "Particles3D", {
+                {"learning_mode", 1.0f},
+                {"count", 800.0f},
+                {"emission_rate", 300.0f},
+                {"speed", 2.5f},
+                {"gravity", gval},
+                {"size", 0.08f},
+                {"bounds", 12.0f},
+            });
+            g.add_node("r1", "Render3D", {
+                {"cam_y", 2.0f}, {"cam_z", 6.0f}
+            });
+            g.add_connection("p1", "scene", "r1", "scene");
+
+            vivid::Scheduler sched;
+            check(sched.build(g, registry), "build succeeds (gravity case)");
+            sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+
+            for (int i = 0; i < 14; ++i) {
+                tick_and_submit(sched, gpu, kFormat, i * 0.016, 0.016);
+            }
+            auto pixels = get_pixels(sched, W, H, "r1");
+            sched.shutdown();
+            return pixels;
+        };
+
+        auto up = run_case(+2.0f);
+        auto down = run_case(-4.0f);
+        check(!up.empty() && !down.empty(), "gravity test readbacks succeeded");
+        if (!up.empty() && up.size() == down.size()) {
+            bool differs = false;
+            for (size_t i = 0; i < up.size(); ++i) {
+                if (up[i] != down[i]) { differs = true; break; }
+            }
+            check(differs, "different gravity values produce different rendered output");
+        }
+    }
+
+    // -----------------------------------------------------------------
     // GPU Test: Zero emission rate — all black
     // -----------------------------------------------------------------
     std::fprintf(stderr, "\n=== GPU Test: Zero emission — all black ===\n");
@@ -429,6 +486,7 @@ int main() {
 
         vivid::Graph g;
         g.add_node("p1", "Particles3D", {
+            {"learning_mode", 1.0f},
             {"count", 100.0f},
             {"emission_rate", 0.0f},
         });

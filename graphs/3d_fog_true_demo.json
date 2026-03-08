@@ -1,0 +1,67 @@
+{
+  "nodes": {
+    "sphere": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 1,
+        "pos_x": -1.8,
+        "r": 0.9,
+        "g": 0.35,
+        "b": 0.25,
+        "roughness": 0.45,
+        "metallic": 0.0
+      }
+    },
+    "cube_far": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 0,
+        "pos_x": 2.2,
+        "pos_z": -4.8,
+        "r": 0.95,
+        "g": 0.7,
+        "b": 0.25,
+        "roughness": 0.55,
+        "metallic": 0.0
+      }
+    },
+    "light": {
+      "type": "Light3D",
+      "params": {
+        "type": 0,
+        "intensity": 1.4,
+        "pos_x": 4.0,
+        "pos_y": 5.0,
+        "pos_z": 2.0
+      }
+    },
+    "merge": { "type": "SceneMerge" },
+    "render": {
+      "type": "Render3D",
+      "params": {
+        "cam_y": 2.0,
+        "cam_z": 8.5,
+        "target_z": -2.0,
+        "bg_r": 0.06,
+        "bg_g": 0.08,
+        "bg_b": 0.12,
+        "fog_enabled": 1,
+        "fog_mode": 1,
+        "fog_color_r": 0.46,
+        "fog_color_g": 0.56,
+        "fog_color_b": 0.86,
+        "fog_near": 2.0,
+        "fog_far": 18.0,
+        "fog_density": 0.08
+      }
+    },
+    "vout": { "type": "video_out" }
+  },
+  "connections": [
+    { "from": "sphere/scene", "to": "merge/scene_a" },
+    { "from": "cube_far/scene", "to": "merge/scene_b" },
+    { "from": "light/scene", "to": "merge/scene_c" },
+    { "from": "merge/scene", "to": "render/scene" },
+    { "from": "render/texture", "to": "vout/input" }
+  ]
+}

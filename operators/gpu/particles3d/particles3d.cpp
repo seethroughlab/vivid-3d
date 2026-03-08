@@ -41,9 +41,9 @@ struct Params {
     time: f32,
     elongation: f32,
     shape: u32,
-    _pad0: u32,
-    _pad1: u32,
-    _pad2: u32,
+    learning_mode: u32, // 0=Advanced, 1=Beginner
+    bounds: f32,
+    _pad0: f32,
 }
 
 struct InstanceData {
@@ -233,6 +233,15 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3u) {
         }
 
         p.position += p.velocity * params.dt;
+        // Beginner-friendly safety bounds: out-of-range particles are reset.
+        if (params.bounds > 0.0) {
+            let out_of_bounds = abs(p.position.x) > params.bounds
+                             || abs(p.position.y) > params.bounds
+                             || abs(p.position.z) > params.bounds;
+            if (out_of_bounds) {
+                p.lifetime = 0.0;
+            }
+        }
         p.age += params.dt;
         if (p.age >= p.lifetime) {
             p.lifetime = 0.0;  // kill
@@ -296,9 +305,9 @@ struct ParamsData {
     float    time;            // 72
     float    elongation;      // 76
     uint32_t shape;           // 80
-    uint32_t _pad0;           // 84
-    uint32_t _pad1;           // 88
-    uint32_t _pad2;           // 92
+    uint32_t learning_mode;   // 84
+    float    bounds;          // 88
+    float    _pad0;           // 92
 };
 static_assert(sizeof(ParamsData) == 96, "ParamsData must be 96 bytes");
 
@@ -332,6 +341,7 @@ struct Particles3D : vivid::OperatorBase {
     vivid::Param<int>   shape      {"shape",      0, {"Billboard", "Cuboid"}};
     vivid::Param<float> elongation {"elongation",  5.0f, 1.0f, 20.0f};
     vivid::Param<float> size       {"size",        0.05f, 0.01f, 2.0f};
+    vivid::Param<float> bounds     {"bounds",      20.0f, 1.0f, 200.0f};
 
     // Color (warm orange default)
     vivid::Param<float> r {"r", 1.0f, 0.0f, 1.0f};
@@ -343,7 +353,12 @@ struct Particles3D : vivid::OperatorBase {
     vivid::Param<float> emission {"emission", 0.5f, 0.0f, 5.0f};
     vivid::Param<int>   unlit    {"unlit",    1, {"Off", "On"}};
 
+    // Learning mode
+    vivid::Param<int> learning_mode {"learning_mode", 0, {"Advanced", "Beginner"}};
+
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
+        vivid::param_group(learning_mode, "Learning");
+
         vivid::param_group(count, "Emission");
         vivid::param_group(emission_rate, "Emission");
         vivid::param_group(lifetime, "Emission");
@@ -361,6 +376,7 @@ struct Particles3D : vivid::OperatorBase {
         vivid::param_group(shape, "Appearance");
         vivid::param_group(elongation, "Appearance");
         vivid::param_group(size, "Appearance");
+        vivid::param_group(bounds, "Appearance");
 
         vivid::param_group(r, "Color");
         vivid::param_group(g, "Color");
@@ -387,12 +403,14 @@ struct Particles3D : vivid::OperatorBase {
         out.push_back(&shape);
         out.push_back(&elongation);
         out.push_back(&size);
+        out.push_back(&bounds);
         out.push_back(&r);
         out.push_back(&g);
         out.push_back(&b);
         out.push_back(&a);
         out.push_back(&emission);
         out.push_back(&unlit);
+        out.push_back(&learning_mode);
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
@@ -423,6 +441,7 @@ struct Particles3D : vivid::OperatorBase {
 
         // Upload params
         ParamsData params{};
+        const bool beginner = (learning_mode.int_value() == 1);
         params.max_count  = max_count;
         params.new_spawns = new_spawns;
         params.dt         = dt;
@@ -436,15 +455,17 @@ struct Particles3D : vivid::OperatorBase {
         params.color[2]   = b.value;
         params.color[3]   = a.value;
         params.seed           = frame_counter_++;
-        params.noise_octaves  = static_cast<uint32_t>(noise_octaves.int_value());
-        params.noise_scale    = noise_scale.value;
-        params.noise_speed    = noise_speed.value;
-        params.curl_strength  = curl_strength.value;
-        params.drag           = drag.value;
+        params.noise_octaves  = beginner ? 1u : static_cast<uint32_t>(noise_octaves.int_value());
+        params.noise_scale    = beginner ? 1.0f : noise_scale.value;
+        params.noise_speed    = beginner ? 0.0f : noise_speed.value;
+        params.curl_strength  = beginner ? 0.0f : curl_strength.value;
+        params.drag           = beginner ? 0.05f : drag.value;
         elapsed_time_ += dt;
         params.time           = elapsed_time_;
-        params.elongation     = elongation.value;
-        params.shape          = static_cast<uint32_t>(shape.int_value());
+        params.elongation     = beginner ? 1.0f : elongation.value;
+        params.shape          = beginner ? 0u : static_cast<uint32_t>(shape.int_value());
+        params.learning_mode  = beginner ? 1u : 0u;
+        params.bounds         = bounds.value;
         wgpuQueueWriteBuffer(gpu->queue, params_ubo_, 0, &params, sizeof(params));
 
         // Reset atomic counter to 0
