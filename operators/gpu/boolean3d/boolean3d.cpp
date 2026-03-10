@@ -174,7 +174,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
             b->cpu_vertex_count == 0 || b->cpu_index_count == 0) {
             // No valid input B — pass through A
             fragment_ = *a;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -203,7 +203,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
             fragment_.metallic  = a->metallic;
             fragment_.emission  = a->emission;
             fragment_.unlit     = a->unlit;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -216,7 +216,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
         if (man_a.Status() != manifold::Manifold::Error::NoError) {
             // Non-manifold input A — pass through unchanged
             fragment_ = *a;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -224,7 +224,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
         if (man_b.Status() != manifold::Manifold::Error::NoError) {
             // Non-manifold input B — pass through A
             fragment_ = *a;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -240,7 +240,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
         if (result.Status() != manifold::Manifold::Error::NoError) {
             // Boolean failed — pass through A
             fragment_ = *a;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -252,7 +252,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
 
         if (out_mesh.triVerts.empty()) {
             fragment_ = *a;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -364,7 +364,7 @@ struct Boolean3D : vivid::GpuOperatorBase {
         fragment_.pipeline       = nullptr;
         fragment_.material_binds = nullptr;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Boolean3D() override {

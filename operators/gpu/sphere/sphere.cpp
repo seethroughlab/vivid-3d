@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -9,7 +10,7 @@
 // =============================================================================
 // Sphere — UV sphere mesh generator
 //
-// Output: "mesh" (VIVID_PORT_GPU_MESH)
+// Output: "mesh" (VIVID_PORT_HANDLE)
 // Vertices: (lat_segments+1)*(lon_segments+1), interleaved
 //           pos(vec3) + normal(vec3) + uv(vec2) = 32 bytes.
 // Indices:  lat_segments * lon_segments * 6 uint32_t, TriangleList.
@@ -29,11 +30,11 @@ struct Sphere : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"mesh", VIVID_PORT_GPU_MESH, VIVID_PORT_OUTPUT});
+        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_mesh_count == 0) return;
+        if (ctx->output_handle_count == 0) return;
 
         int lat = lat_segments.int_value();
         int lon = lon_segments.int_value();
@@ -42,7 +43,7 @@ struct Sphere : vivid::GpuOperatorBase {
             rebuild(ctx, lat, lon);
         }
 
-        ctx->output_meshes[0] = &mesh_;
+        ctx->output_handles[0] = &mesh_;
     }
 
     ~Sphere() override {

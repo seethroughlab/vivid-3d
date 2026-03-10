@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -8,7 +9,7 @@
 // =============================================================================
 // Box — axis-aligned box mesh generator with per-face normals
 //
-// Output: "mesh" (VIVID_PORT_GPU_MESH)
+// Output: "mesh" (VIVID_PORT_HANDLE)
 // 24 vertices (4 per face × 6 faces), same layout as Sphere:
 //   pos(vec3) + normal(vec3) + uv(vec2) = 32 bytes.
 // 36 indices (6 per face), TriangleList.
@@ -30,18 +31,18 @@ struct Box : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"mesh", VIVID_PORT_GPU_MESH, VIVID_PORT_OUTPUT});
+        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_mesh_count == 0) return;
+        if (ctx->output_handle_count == 0) return;
 
         float w = width.value, h = height.value, d = depth.value;
         if (w != built_w_ || h != built_h_ || d != built_d_) {
             rebuild(ctx, w, h, d);
         }
 
-        ctx->output_meshes[0] = &mesh_;
+        ctx->output_handles[0] = &mesh_;
     }
 
     ~Box() override {

@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -11,11 +12,11 @@
 // InstancedRender — renders N instances of an input mesh to a texture.
 //
 // Input ports:
-//   "mesh"       VIVID_PORT_GPU_MESH     (required) — geometry to draw
-//   "transforms" VIVID_PORT_GPU_COMPUTE  (optional) — per-instance vec4 transforms
-//   "positions"  VIVID_PORT_CONTROL_SPREAD (fallback) — [x0,y0, x1,y1, ...] pairs
+//   "mesh"       VIVID_PORT_HANDLE     (required) — geometry to draw
+//   "transforms" VIVID_PORT_HANDLE  (optional) — per-instance vec4 transforms
+//   "positions"  VIVID_PORT_SPREAD (fallback) — [x0,y0, x1,y1, ...] pairs
 //
-// Output: "texture" VIVID_PORT_GPU_TEXTURE
+// Output: "texture" VIVID_PORT_TEXTURE
 //
 // Per-instance data (vec4f): xyz = translation, w = unused.
 // Vertex shader reads @location(0) vec3f position from mesh vertex buffer,
@@ -79,10 +80,10 @@ struct InstancedRender : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"mesh",       VIVID_PORT_GPU_MESH,       VIVID_PORT_INPUT});
-        out.push_back({"transforms", VIVID_PORT_GPU_COMPUTE,    VIVID_PORT_INPUT});
-        out.push_back({"positions",  VIVID_PORT_CONTROL_SPREAD, VIVID_PORT_INPUT});
-        out.push_back({"texture",    VIVID_PORT_GPU_TEXTURE,    VIVID_PORT_OUTPUT});
+        out.push_back(VIVID_HANDLE_PORT("mesh",       VIVID_PORT_INPUT,  VividMesh));
+        out.push_back(VIVID_HANDLE_PORT("transforms", VIVID_PORT_INPUT,  VividComputeBuffer));
+        out.push_back({"positions",  VIVID_PORT_SPREAD, VIVID_PORT_INPUT});
+        out.push_back({"texture",    VIVID_PORT_TEXTURE,    VIVID_PORT_OUTPUT});
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -90,8 +91,8 @@ struct InstancedRender : vivid::GpuOperatorBase {
 
         // --- Require input mesh ---
         VividMesh* mesh = nullptr;
-        if (ctx->input_mesh_count > 0 && ctx->input_meshes)
-            mesh = ctx->input_meshes[0];
+        if (ctx->input_handle_count > 0 && ctx->input_handles && ctx->input_handles[0])
+            mesh = static_cast<VividMesh*>(ctx->input_handles[0]);
         if (!mesh || !mesh->vertex_buffer || mesh->vertex_count == 0) {
             // No mesh: clear to transparent and return
             clear_output(ctx);
@@ -111,9 +112,9 @@ struct InstancedRender : vivid::GpuOperatorBase {
         uint64_t    transform_buf_size = 0;
         uint32_t    instance_count     = 0;
 
-        if (ctx->input_compute_count > 0 && ctx->input_compute && ctx->input_compute[0]) {
+        if (ctx->input_handle_count > 1 && ctx->input_handles && ctx->input_handles[1]) {
             // Compute path: use the compute buffer directly
-            VividComputeBuffer* cb = ctx->input_compute[0];
+            VividComputeBuffer* cb = static_cast<VividComputeBuffer*>(ctx->input_handles[1]);
             transform_buf      = cb->buffer;
             transform_buf_size = cb->size_bytes;
             instance_count     = cb->element_count;

@@ -143,18 +143,18 @@ struct Deformer : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));
-        out.push_back({"amount", VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_INPUT});
+        out.push_back({"amount", VIVID_PORT_FLOAT, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
         // Check input scene
-        if (ctx->input_data_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
+        if (ctx->input_handle_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
 
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->cpu_vertices || input->cpu_vertex_count == 0) {
             // Pass through unmodified if no CPU vertex data
-            ctx->output_data[0] = const_cast<vivid::gpu::VividSceneFragment*>(input);
+            ctx->output_handles[0] = const_cast<vivid::gpu::VividSceneFragment*>(input);
             return;
         }
 
@@ -235,7 +235,7 @@ struct Deformer : vivid::GpuOperatorBase {
         fragment_.cpu_vertices     = displaced_.data();
         fragment_.cpu_vertex_count = vc;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Deformer() override {

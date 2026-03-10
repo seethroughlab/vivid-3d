@@ -51,16 +51,16 @@ struct Material3D : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));
-        out.push_back({"albedo_map",             VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
-        out.push_back({"normal_map",             VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
-        out.push_back({"roughness_metallic_map", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
-        out.push_back({"emission_map",           VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"albedo_map",             VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"normal_map",             VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"roughness_metallic_map", VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"emission_map",           VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
         // Need scene input
-        bool has_input = ctx->input_data_count > 0 &&
+        bool has_input = ctx->input_handle_count > 0 &&
                          vivid::gpu::scene_input(ctx, 0) != nullptr;
         if (!has_input) return;
 
@@ -133,7 +133,7 @@ struct Material3D : vivid::GpuOperatorBase {
         output_.children    = &child_;
         output_.child_count = 1;
 
-        ctx->output_data[0] = &output_;
+        ctx->output_handles[0] = &output_;
     }
 
     ~Material3D() override {

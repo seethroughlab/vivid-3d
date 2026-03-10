@@ -86,7 +86,7 @@ struct Transform3D : vivid::GpuOperatorBase {
 
     void process_gpu(const VividGpuContext* ctx) override {
         // No input scene → no output
-        bool has_input = ctx->input_data_count > 0 &&
+        bool has_input = ctx->input_handle_count > 0 &&
                          vivid::gpu::scene_input(ctx, 0) != nullptr;
         if (!has_input) return;
 
@@ -116,7 +116,7 @@ struct Transform3D : vivid::GpuOperatorBase {
         output_.children    = &child_;
         output_.child_count = 1;
 
-        ctx->output_data[0] = &output_;
+        ctx->output_handles[0] = &output_;
     }
 
 private:

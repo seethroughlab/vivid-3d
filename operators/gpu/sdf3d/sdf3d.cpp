@@ -568,7 +568,7 @@ struct SDF3D : vivid::GpuOperatorBase {
         fragment_.emission  = emission.value;
         fragment_.unlit     = unlit.int_value() != 0;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~SDF3D() override {

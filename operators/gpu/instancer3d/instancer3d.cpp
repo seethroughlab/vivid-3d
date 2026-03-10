@@ -33,20 +33,20 @@ struct Instancer3D : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));              // 0
-        out.push_back({"positions", VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 1
-        out.push_back({"scales",    VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 2
-        out.push_back({"colors",    VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 3
-        out.push_back({"scale_x",   VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 4
-        out.push_back({"scale_y",   VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 5
-        out.push_back({"scale_z",   VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 6
-        out.push_back({"rotations", VIVID_PORT_CONTROL_SPREAD,  VIVID_PORT_INPUT});   // 7
+        out.push_back({"positions", VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 1
+        out.push_back({"scales",    VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 2
+        out.push_back({"colors",    VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 3
+        out.push_back({"scale_x",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 4
+        out.push_back({"scale_y",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 5
+        out.push_back({"scale_z",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 6
+        out.push_back({"rotations", VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 7
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
 
         // Check input scene
-        if (ctx->input_data_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
+        if (ctx->input_handle_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->vertex_buffer || input->index_count == 0) return;
 
@@ -226,7 +226,7 @@ struct Instancer3D : vivid::GpuOperatorBase {
         fragment_.instance_buffer = storage_buf_;
         fragment_.instance_count  = n;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Instancer3D() override {

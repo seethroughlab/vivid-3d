@@ -425,7 +425,7 @@ struct Environment3D : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"hdri",  VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"hdri",  VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
@@ -443,7 +443,7 @@ struct Environment3D : vivid::GpuOperatorBase {
             fragment_.ibl_brdf_lut    = nullptr;
             fragment_.ibl_sampler     = nullptr;
             fragment_.ibl_intensity   = 0.0f;
-            ctx->output_data[0] = &fragment_;
+            ctx->output_handles[0] = &fragment_;
             return;
         }
 
@@ -480,7 +480,7 @@ struct Environment3D : vivid::GpuOperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Environment3D() override {
@@ -754,9 +754,13 @@ private:
         return wgpuDeviceCreateRenderPipeline(device, &rp);
     }
 
-    void render_face_pass(const VividGpuContext* gpu, WGPURenderPipeline pipeline,
-                          WGPUBindGroup bg, WGPUTextureView target,
-                          uint32_t size, const char* label) {
+    void encode_and_submit_pass(const VividGpuContext* gpu, WGPURenderPipeline pipeline,
+                                WGPUBindGroup bg, WGPUTextureView target,
+                                uint32_t size, const char* label) {
+        WGPUCommandEncoderDescriptor enc_desc{};
+        enc_desc.label = vivid_sv(label);
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu->device, &enc_desc);
+
         WGPURenderPassColorAttachment ca{};
         ca.view = target;
         ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -769,8 +773,7 @@ private:
         rp.colorAttachmentCount = 1;
         rp.colorAttachments = &ca;
 
-        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
-            gpu->command_encoder, &rp);
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &rp);
         wgpuRenderPassEncoderSetViewport(pass, 0, 0,
             static_cast<float>(size), static_cast<float>(size), 0, 1);
         wgpuRenderPassEncoderSetPipeline(pass, pipeline);
@@ -778,6 +781,12 @@ private:
         wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
+
+        WGPUCommandBufferDescriptor cmd_desc{};
+        WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+        wgpuQueueSubmit(gpu->queue, 1, &cmd);
+        wgpuCommandBufferRelease(cmd);
+        wgpuCommandEncoderRelease(encoder);
     }
 
     void precompute_ibl(const VividGpuContext* gpu, WGPUTextureView input_view, float rotation_deg) {
@@ -809,7 +818,7 @@ private:
             WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                 unfiltered_cube_tex_, kHdrFormat, face, 0, "Env3D Equirect Face");
 
-            render_face_pass(gpu, equirect_pipeline_, bg, face_view, kCubeFaceSize,
+            encode_and_submit_pass(gpu, equirect_pipeline_, bg, face_view, kCubeFaceSize,
                            "Env3D Equirect Pass");
 
             wgpuTextureViewRelease(face_view);
@@ -841,7 +850,7 @@ private:
             WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                 irradiance_cube_tex_, kHdrFormat, face, 0, "Env3D Irradiance Face");
 
-            render_face_pass(gpu, irradiance_pipeline_, bg, face_view, kIrradianceSize,
+            encode_and_submit_pass(gpu, irradiance_pipeline_, bg, face_view, kIrradianceSize,
                            "Env3D Irradiance Pass");
 
             wgpuTextureViewRelease(face_view);
@@ -880,7 +889,7 @@ private:
                 WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                     prefiltered_cube_tex_, kHdrFormat, face, mip, "Env3D Prefilter Face");
 
-                render_face_pass(gpu, prefilter_pipeline_, bg, face_view, face_size,
+                encode_and_submit_pass(gpu, prefilter_pipeline_, bg, face_view, face_size,
                                "Env3D Prefilter Pass");
 
                 wgpuTextureViewRelease(face_view);
@@ -898,6 +907,10 @@ private:
         bg_desc.entries = nullptr;
         WGPUBindGroup bg = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
 
+        WGPUCommandEncoderDescriptor enc_desc{};
+        enc_desc.label = vivid_sv("Env3D BRDF LUT Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu->device, &enc_desc);
+
         WGPURenderPassColorAttachment ca{};
         ca.view = brdf_lut_view_;
         ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -910,13 +923,18 @@ private:
         rp.colorAttachmentCount = 1;
         rp.colorAttachments = &ca;
 
-        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
-            gpu->command_encoder, &rp);
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &rp);
         wgpuRenderPassEncoderSetPipeline(pass, brdf_pipeline_);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bg, 0, nullptr);
         wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
+
+        WGPUCommandBufferDescriptor cmd_desc{};
+        WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+        wgpuQueueSubmit(gpu->queue, 1, &cmd);
+        wgpuCommandBufferRelease(cmd);
+        wgpuCommandEncoderRelease(encoder);
         wgpuBindGroupRelease(bg);
     }
 };

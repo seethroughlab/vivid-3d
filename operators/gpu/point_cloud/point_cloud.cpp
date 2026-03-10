@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -9,8 +10,8 @@
 // PointCloud — interprets a CONTROL_SPREAD as [x0,y0, x1,y1, ...] pairs
 //              and produces a PointList mesh.
 //
-// Input:  "positions" (VIVID_PORT_CONTROL_SPREAD)
-// Output: "mesh"      (VIVID_PORT_GPU_MESH, topology PointList)
+// Input:  "positions" (VIVID_PORT_SPREAD)
+// Output: "mesh"      (VIVID_PORT_HANDLE, topology PointList)
 //
 // Vertex layout: vec2f (xy) = 8 bytes per point.
 // Rebuilds vertex buffer when point count changes; uploads spread data each tick.
@@ -33,12 +34,12 @@ struct PointCloud : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"positions", VIVID_PORT_CONTROL_SPREAD, VIVID_PORT_INPUT});
-        out.push_back({"mesh",      VIVID_PORT_GPU_MESH,       VIVID_PORT_OUTPUT});
+        out.push_back({"positions", VIVID_PORT_SPREAD, VIVID_PORT_INPUT});
+        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_mesh_count == 0) return;
+        if (ctx->output_handle_count == 0) return;
 
         // Read positions spread: pairs of [x,y]
         uint32_t spread_len = 0;
@@ -60,7 +61,7 @@ struct PointCloud : vivid::GpuOperatorBase {
                                  spread_data, point_count * 2 * sizeof(float));
         }
 
-        ctx->output_meshes[0] = &mesh_;
+        ctx->output_handles[0] = &mesh_;
     }
 
     ~PointCloud() override {

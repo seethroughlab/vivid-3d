@@ -23,7 +23,7 @@ struct SceneMerge : vivid::GpuOperatorBase {
     void process_gpu(const VividGpuContext* ctx) override {
         // Collect non-null scene inputs
         child_count_ = 0;
-        for (uint32_t i = 0; i < ctx->input_data_count && child_count_ < 4; ++i) {
+        for (uint32_t i = 0; i < ctx->input_handle_count && child_count_ < 4; ++i) {
             auto* s = vivid::gpu::scene_input(ctx, i);
             if (s) {
                 children_[child_count_++] = s;
@@ -44,7 +44,7 @@ struct SceneMerge : vivid::GpuOperatorBase {
         output_.children        = children_;
         output_.child_count     = child_count_;
 
-        ctx->output_data[0] = &output_;
+        ctx->output_handles[0] = &output_;
     }
 
 private:

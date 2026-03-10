@@ -864,7 +864,7 @@ struct Shape3D : vivid::GpuOperatorBase {
         fragment_.pipeline       = nullptr;
         fragment_.material_binds = nullptr;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Shape3D() override {

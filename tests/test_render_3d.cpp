@@ -251,9 +251,9 @@ int main() {
     // CPU tests (always run, no GPU needed)
     // =====================================================================
 
-    std::fprintf(stderr, "\n=== CPU Test: VIVID_PORT_DATA enum ===\n");
+    std::fprintf(stderr, "\n=== CPU Test: VIVID_PORT_HANDLE enum ===\n");
     {
-        check(VIVID_PORT_DATA == 6, "VIVID_PORT_DATA == 6");
+        check(VIVID_PORT_HANDLE == 6, "VIVID_PORT_HANDLE == 6");
     }
 
     std::fprintf(stderr, "\n=== CPU Test: VividSceneFragment defaults ===\n");
@@ -283,13 +283,13 @@ int main() {
     std::fprintf(stderr, "\n=== CPU Test: port_type_compatible ===\n");
     {
         using vivid::ui::port_type_compatible;
-        check(port_type_compatible(VIVID_PORT_DATA, VIVID_PORT_DATA) == true,
+        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_HANDLE) == true,
               "DATA <-> DATA compatible");
-        check(port_type_compatible(VIVID_PORT_DATA, VIVID_PORT_GPU_TEXTURE) == false,
+        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_TEXTURE) == false,
               "DATA <-> GPU_TEXTURE incompatible");
-        check(port_type_compatible(VIVID_PORT_DATA, VIVID_PORT_CONTROL_FLOAT) == false,
+        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_FLOAT) == false,
               "DATA <-> CONTROL_FLOAT incompatible");
-        check(port_type_compatible(VIVID_PORT_DATA, VIVID_PORT_AUDIO_FLOAT) == false,
+        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_AUDIO) == false,
               "DATA <-> AUDIO_FLOAT incompatible");
     }
 
@@ -352,7 +352,7 @@ int main() {
         auto& ns = sched.nodes_mut()[0];
         check(ns.is_gpu, "Render3D is GPU domain");
         check(ns.has_texture_output, "Render3D has texture output");
-        check(ns.data_input_port_indices.size() == 1,
+        check(ns.handle_input_port_indices.size() == 1,
               "Render3D has 1 scene input port");
         check(ns.texture_input_port_indices.empty(),
               "Render3D has 0 texture input ports");

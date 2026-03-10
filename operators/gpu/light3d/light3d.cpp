@@ -73,7 +73,7 @@ struct Light3D : vivid::GpuOperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
 private:

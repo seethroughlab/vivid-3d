@@ -59,12 +59,12 @@ struct OrbitCamera : vivid::ControlOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"cam_x",    VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"cam_y",    VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"cam_z",    VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_x", VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_y", VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_z", VIVID_PORT_CONTROL_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_x",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_y",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_z",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"target_x", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"target_y", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"target_z", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
     }
 
     void write_outputs(const VividProcessContext* ctx) {

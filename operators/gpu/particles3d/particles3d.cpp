@@ -530,7 +530,7 @@ struct Particles3D : vivid::GpuOperatorBase {
         fragment_.roughness = 0.5f;
         fragment_.metallic  = 0.0f;
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~Particles3D() override {

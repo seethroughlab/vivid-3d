@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -8,7 +9,7 @@
 // =============================================================================
 // Grid — subdivided plane mesh generator
 //
-// Output: "mesh" (VIVID_PORT_GPU_MESH)
+// Output: "mesh" (VIVID_PORT_HANDLE)
 // Vertices: (cols+1)*(rows+1), interleaved pos(vec3) + uv(vec2) = 20 bytes.
 // Indices:  cols*rows*6 uint32_t, TriangleList.
 // Lazy-rebuilds buffers when cols/rows params change.
@@ -27,11 +28,11 @@ struct Grid : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"mesh", VIVID_PORT_GPU_MESH, VIVID_PORT_OUTPUT});
+        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_mesh_count == 0) return;
+        if (ctx->output_handle_count == 0) return;
 
         int c = cols.int_value();
         int r = rows.int_value();
@@ -40,7 +41,7 @@ struct Grid : vivid::GpuOperatorBase {
             rebuild(ctx, c, r);
         }
 
-        ctx->output_meshes[0] = &mesh_;
+        ctx->output_handles[0] = &mesh_;
     }
 
     ~Grid() override {

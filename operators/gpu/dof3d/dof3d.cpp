@@ -242,9 +242,9 @@ struct DepthOfField3D : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"color",   VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
-        out.push_back({"depth",   VIVID_PORT_GPU_TEXTURE, VIVID_PORT_INPUT});
-        out.push_back({"texture", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
+        out.push_back({"color",   VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"depth",   VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
+        out.push_back({"texture", VIVID_PORT_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
     void process_gpu(const VividGpuContext* ctx) override {

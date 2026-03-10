@@ -5,6 +5,7 @@
 // Header-only, follows conventions of gpu_common.h.
 
 #include "operator_api/gpu_common.h"
+#include "operator_api/type_id.h"
 #include "linmath.h"
 #include <cmath>
 #include <cstdint>
@@ -706,12 +707,12 @@ inline WGPUSampler create_clamp_linear_sampler(WGPUDevice device, const char* la
 }
 
 // ---------------------------------------------------------------------------
-// Port declaration helper — creates a VIVID_PORT_DATA port with data_type "vivid3d.gpu_scene".
+// Port declaration helper — creates a VIVID_PORT_HANDLE port with data_type "vivid3d.gpu_scene".
 // The qualified prefix prevents silent cross-package mismatches at the scheduler level.
 // ---------------------------------------------------------------------------
 
 inline VividPortDescriptor scene_port(const char* name, VividPortDirection dir) {
-    return {name, VIVID_PORT_DATA, dir, "vivid3d.gpu_scene"};
+    return VIVID_HANDLE_PORT(name, dir, VividSceneFragment);
 }
 
 // ---------------------------------------------------------------------------
@@ -719,8 +720,8 @@ inline VividPortDescriptor scene_port(const char* name, VividPortDirection dir) 
 // ---------------------------------------------------------------------------
 
 inline VividSceneFragment* scene_input(const VividGpuContext* ctx, uint32_t idx) {
-    if (!ctx->input_data || idx >= ctx->input_data_count) return nullptr;
-    return static_cast<VividSceneFragment*>(ctx->input_data[idx]);
+    if (!ctx->input_handles || idx >= ctx->input_handle_count) return nullptr;
+    return static_cast<VividSceneFragment*>(ctx->input_handles[idx]);
 }
 
 } // namespace vivid::gpu

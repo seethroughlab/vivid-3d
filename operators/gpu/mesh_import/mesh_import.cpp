@@ -155,7 +155,7 @@ struct MeshImport : vivid::GpuOperatorBase {
             fragment_.pipeline_flags = 0;
         }
 
-        ctx->output_data[0] = &fragment_;
+        ctx->output_handles[0] = &fragment_;
     }
 
     ~MeshImport() override {
