@@ -23,13 +23,13 @@
             }
         },
         "albedo": {
-            "type": "MovieFileIn",
+            "type": "TextureLoader",
             "params": {
                 "file": "../assets/streaky-metal1-bl/streaky-metal1_albedo.png"
             }
         },
         "normal": {
-            "type": "MovieFileIn",
+            "type": "TextureLoader",
             "params": {
                 "file": "../assets/streaky-metal1-bl/streaky-metal1_normal-ogl.png"
             }
@@ -44,7 +44,7 @@
             }
         },
         "hdri": {
-            "type": "MovieFileIn",
+            "type": "TextureLoader",
             "params": {
                 "file": "../assets/env.png"
             }

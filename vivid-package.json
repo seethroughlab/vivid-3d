@@ -5,6 +5,11 @@
   "description": "3D rendering operators for Vivid",
   "build": "cmake",
   "gpu_operators": [
+    "gpu/grid",
+    "gpu/sphere",
+    "gpu/box",
+    "gpu/point_cloud",
+    "gpu/instanced_render",
     "gpu/render_3d",
     "gpu/shape3d",
     "gpu/transform3d",

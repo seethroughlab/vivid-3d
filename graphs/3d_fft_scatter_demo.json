@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "vivid_version": "0.1.0",
+  "meta": {
+    "id": "3d_fft_scatter_demo",
+    "title": "FFT Scatter",
+    "description": "Visualises FFT spectrum energy as a scatter of instanced quads. Adjacent frequency bin magnitudes form (x, y) positions, producing a shape that pulses and morphs with the audio.",
+    "tags": [
+      "fft",
+      "point_cloud",
+      "instanced",
+      "demo"
+    ],
+    "difficulty": "intermediate",
+    "domains": [
+      "audio",
+      "gpu",
+      "control"
+    ],
+    "requires_packages": ["vivid-3d"],
+    "featured_rank": 20
+  },
+  "nodes": {
+    "osc1": {
+      "type": "Oscillator",
+      "params": {
+        "frequency": 440.0
+      }
+    },
+    "gain1": {
+      "type": "Gain",
+      "params": {
+        "gain": 0.5
+      }
+    },
+    "out1": {
+      "type": "audio_out",
+      "params": {}
+    },
+    "fft1": {
+      "type": "FFTAnalysis",
+      "params": {
+        "window": 1
+      }
+    },
+    "grid1": {
+      "type": "Grid",
+      "params": {
+        "cols": 1,
+        "rows": 1
+      }
+    },
+    "ir1": {
+      "type": "InstancedRender",
+      "params": {
+        "scale": 0.05
+      }
+    },
+    "vout": {
+      "type": "video_out",
+      "params": {}
+    }
+  },
+  "connections": [
+    {
+      "from": "osc1/output",
+      "to": "gain1/input"
+    },
+    {
+      "from": "gain1/output",
+      "to": "out1/input"
+    },
+    {
+      "from": "gain1/waveform",
+      "to": "fft1/waveform"
+    },
+    {
+      "from": "fft1/spectrum",
+      "to": "ir1/positions"
+    },
+    {
+      "from": "grid1/mesh",
+      "to": "ir1/mesh"
+    },
+    {
+      "from": "ir1/texture",
+      "to": "vout/input"
+    }
+  ]
+}

@@ -106,6 +106,13 @@ function(add_3d_operator name source)
         target_include_directories(${name} PRIVATE ${ARG_EXTRA_INCLUDES})
     endif()
 endfunction()
+# --- Tier 1: raw geometry generators (GPU_MESH output, no scene overhead) ---
+add_3d_operator(grid             operators/gpu/grid/grid.cpp)
+add_3d_operator(sphere           operators/gpu/sphere/sphere.cpp)
+add_3d_operator(box              operators/gpu/box/box.cpp)
+add_3d_operator(point_cloud      operators/gpu/point_cloud/point_cloud.cpp)
+add_3d_operator(instanced_render operators/gpu/instanced_render/instanced_render.cpp)
+
 # --- 3D operator plugins ---
 add_3d_operator(render_3d     operators/gpu/render_3d/render_3d.cpp)
 add_3d_operator(shape3d       operators/gpu/shape3d/shape3d.cpp)
@@ -145,6 +152,7 @@ add_3d_operator(boolean3d operators/gpu/boolean3d/boolean3d.cpp EXTRA_LIBS manif
 
 # --- Operators meta-target (for smoke CI: builds only dylibs, skips test executables) ---
 add_custom_target(operators DEPENDS
+    grid sphere box point_cloud instanced_render
     render_3d shape3d transform3d scene_merge light3d mesh_import
     deformer instancer3d particles3d sdf3d material3d ssao3d dof3d
     environment3d boolean3d orbit_camera)

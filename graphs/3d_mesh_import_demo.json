@@ -19,7 +19,7 @@
             }
         },
         "hdri": {
-            "type": "MovieFileIn",
+            "type": "TextureLoader",
             "params": {
                 "file": "../assets/env.png"
             }
