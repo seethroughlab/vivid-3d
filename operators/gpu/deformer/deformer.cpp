@@ -117,9 +117,8 @@ float simplex3d(float x, float y, float z) {
 // Deformer Operator — CPU vertex displacement
 // =============================================================================
 
-struct Deformer : vivid::OperatorBase {
+struct Deformer : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Deformer";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<int>   mode      {"mode", 0, {"Noise", "Sine", "Audio"}};
@@ -148,17 +147,14 @@ struct Deformer : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Check input scene
-        if (gpu->input_data_count == 0 || !vivid::gpu::scene_input(gpu, 0)) return;
+        if (ctx->input_data_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
 
-        const auto* input = vivid::gpu::scene_input(gpu, 0);
+        const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->cpu_vertices || input->cpu_vertex_count == 0) {
             // Pass through unmodified if no CPU vertex data
-            gpu->output_data = const_cast<vivid::gpu::VividSceneFragment*>(input);
+            ctx->output_data[0] = const_cast<vivid::gpu::VividSceneFragment*>(input);
             return;
         }
 
@@ -225,10 +221,10 @@ struct Deformer : vivid::OperatorBase {
         if (needed != vb_size_) {
             vivid::gpu::release(vertex_buffer_);
             vertex_buffer_ = vivid::gpu::create_vertex_buffer(
-                gpu->device, gpu->queue, displaced_.data(), needed, "Deformer VB");
+                ctx->device, ctx->queue, displaced_.data(), needed, "Deformer VB");
             vb_size_ = needed;
         } else {
-            wgpuQueueWriteBuffer(gpu->queue, vertex_buffer_, 0,
+            wgpuQueueWriteBuffer(ctx->queue, vertex_buffer_, 0,
                                  displaced_.data(), needed);
         }
 
@@ -239,7 +235,7 @@ struct Deformer : vivid::OperatorBase {
         fragment_.cpu_vertices     = displaced_.data();
         fragment_.cpu_vertex_count = vc;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Deformer() override {

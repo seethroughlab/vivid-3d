@@ -230,9 +230,8 @@ struct SSAOUniforms {
 // SSAO3D Operator
 // =============================================================================
 
-struct SSAO3D : vivid::OperatorBase {
+struct SSAO3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "SSAO3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> radius     {"radius",     0.5f,  0.01f, 5.0f};
@@ -255,12 +254,9 @@ struct SSAO3D : vivid::OperatorBase {
         out.push_back({"texture", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (!raw_pipeline_) {
-            if (!lazy_init(gpu)) {
+            if (!lazy_init(ctx)) {
                 std::fprintf(stderr, "[ssao3d] lazy_init FAILED\n");
                 return;
             }
@@ -269,10 +265,10 @@ struct SSAO3D : vivid::OperatorBase {
         // Get inputs
         WGPUTextureView color_input = nullptr;
         WGPUTextureView depth_input = nullptr;
-        if (gpu->input_texture_views && gpu->input_texture_count >= 1)
-            color_input = gpu->input_texture_views[0];
-        if (gpu->input_texture_views && gpu->input_texture_count >= 2)
-            depth_input = gpu->input_texture_views[1];
+        if (ctx->input_texture_views && ctx->input_texture_count >= 1)
+            color_input = ctx->input_texture_views[0];
+        if (ctx->input_texture_views && ctx->input_texture_count >= 2)
+            depth_input = ctx->input_texture_views[1];
 
         if (!color_input || !depth_input) {
             // Pass through or clear
@@ -280,10 +276,10 @@ struct SSAO3D : vivid::OperatorBase {
         }
 
         // Resize intermediates
-        if (gpu->output_width != cached_w_ || gpu->output_height != cached_h_) {
-            recreate_intermediates(gpu);
-            cached_w_ = gpu->output_width;
-            cached_h_ = gpu->output_height;
+        if (ctx->output_width != cached_w_ || ctx->output_height != cached_h_) {
+            recreate_intermediates(ctx);
+            cached_w_ = ctx->output_width;
+            cached_h_ = ctx->output_height;
         }
 
         // Update uniforms
@@ -293,14 +289,14 @@ struct SSAO3D : vivid::OperatorBase {
         u.bias       = bias.value;
         u.near_plane = near_plane.value;
         u.far_plane  = far_plane.value;
-        u.texel_w    = 1.0f / static_cast<float>(gpu->output_width);
-        u.texel_h    = 1.0f / static_cast<float>(gpu->output_height);
+        u.texel_w    = 1.0f / static_cast<float>(ctx->output_width);
+        u.texel_h    = 1.0f / static_cast<float>(ctx->output_height);
         std::memcpy(u.kernel, kernel_, sizeof(kernel_));
-        wgpuQueueWriteBuffer(gpu->queue, uniform_buf_, 0, &u, sizeof(u));
+        wgpuQueueWriteBuffer(ctx->queue, uniform_buf_, 0, &u, sizeof(u));
 
         // Rebuild bind groups if inputs changed
         if (color_input != cached_color_ || depth_input != cached_depth_ || bg_dirty_) {
-            rebuild_bind_groups(gpu, color_input, depth_input);
+            rebuild_bind_groups(ctx, color_input, depth_input);
             cached_color_ = color_input;
             cached_depth_ = depth_input;
             bg_dirty_ = false;
@@ -309,16 +305,16 @@ struct SSAO3D : vivid::OperatorBase {
         static constexpr WGPUColor kClear{0, 0, 0, 0};
 
         // Pass 1: Raw SSAO → inter_a (R8Unorm)
-        vivid::gpu::run_pass(gpu->command_encoder, raw_pipeline_, raw_bg_,
+        vivid::gpu::run_pass(ctx->command_encoder, raw_pipeline_, raw_bg_,
                              inter_view_a_, "SSAO Raw", kClear);
 
         // Pass 2: Bilateral blur → inter_b (R8Unorm)
-        vivid::gpu::run_pass(gpu->command_encoder, blur_pipeline_, blur_bg_,
+        vivid::gpu::run_pass(ctx->command_encoder, blur_pipeline_, blur_bg_,
                              inter_view_b_, "SSAO Blur", kClear);
 
         // Pass 3: Composite → output
-        vivid::gpu::run_pass(gpu->command_encoder, composite_pipeline_, composite_bg_,
-                             gpu->output_texture_view, "SSAO Composite", kClear);
+        vivid::gpu::run_pass(ctx->command_encoder, composite_pipeline_, composite_bg_,
+                             ctx->output_texture_view, "SSAO Composite", kClear);
     }
 
     ~SSAO3D() override {
@@ -417,7 +413,7 @@ private:
         }
     }
 
-    void create_noise_texture(VividGpuState* gpu) {
+    void create_noise_texture(const VividGpuContext* ctx) {
         // 4x4 random rotation vectors
         uint32_t seed = 0xDEADBEEF;
         auto rng = [&]() -> float {
@@ -443,7 +439,7 @@ private:
         td.dimension = WGPUTextureDimension_2D;
         td.format = WGPUTextureFormat_RGBA8Unorm;
         td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-        noise_tex_ = wgpuDeviceCreateTexture(gpu->device, &td);
+        noise_tex_ = wgpuDeviceCreateTexture(ctx->device, &td);
 
         WGPUTexelCopyTextureInfo dst{};
         dst.texture = noise_tex_;
@@ -451,7 +447,7 @@ private:
         layout.bytesPerRow = 4 * 4;
         layout.rowsPerImage = 4;
         WGPUExtent3D extent = {4, 4, 1};
-        wgpuQueueWriteTexture(gpu->queue, &dst, noise_data, sizeof(noise_data), &layout, &extent);
+        wgpuQueueWriteTexture(ctx->queue, &dst, noise_data, sizeof(noise_data), &layout, &extent);
 
         WGPUTextureViewDescriptor vd{};
         vd.format = WGPUTextureFormat_RGBA8Unorm;
@@ -461,7 +457,7 @@ private:
         noise_view_ = wgpuTextureCreateView(noise_tex_, &vd);
     }
 
-    void recreate_intermediates(VividGpuState* gpu) {
+    void recreate_intermediates(const VividGpuContext* ctx) {
         vivid::gpu::release(inter_tex_a_);
         vivid::gpu::release(inter_view_a_);
         vivid::gpu::release(inter_tex_b_);
@@ -470,14 +466,14 @@ private:
         for (int i = 0; i < 2; ++i) {
             WGPUTextureDescriptor td{};
             td.label = vivid_sv(i == 0 ? "SSAO Inter A" : "SSAO Inter B");
-            td.size = { gpu->output_width, gpu->output_height, 1 };
+            td.size = { ctx->output_width, ctx->output_height, 1 };
             td.mipLevelCount = 1;
             td.sampleCount = 1;
             td.dimension = WGPUTextureDimension_2D;
             td.format = WGPUTextureFormat_RGBA8Unorm;
             td.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
 
-            WGPUTexture tex = wgpuDeviceCreateTexture(gpu->device, &td);
+            WGPUTexture tex = wgpuDeviceCreateTexture(ctx->device, &td);
 
             WGPUTextureViewDescriptor vd{};
             vd.format = WGPUTextureFormat_RGBA8Unorm;
@@ -492,7 +488,7 @@ private:
         bg_dirty_ = true;
     }
 
-    void rebuild_bind_groups(VividGpuState* gpu, WGPUTextureView color_input,
+    void rebuild_bind_groups(const VividGpuContext* ctx, WGPUTextureView color_input,
                               WGPUTextureView depth_input) {
         vivid::gpu::release(raw_bg_);
         vivid::gpu::release(blur_bg_);
@@ -514,7 +510,7 @@ private:
             desc.layout = raw_bgl_;
             desc.entryCount = 3;
             desc.entries = entries;
-            raw_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+            raw_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
         }
 
         // Blur: uniform + ao_tex(inter_a) + depth
@@ -533,7 +529,7 @@ private:
             desc.layout = blur_bgl_;
             desc.entryCount = 3;
             desc.entries = entries;
-            blur_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+            blur_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
         }
 
         // Composite: uniform + sampler + color + ao(inter_b)
@@ -554,21 +550,21 @@ private:
             desc.layout = composite_bgl_;
             desc.entryCount = 4;
             desc.entries = entries;
-            composite_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+            composite_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
         }
     }
 
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* ctx) {
         generate_kernel();
-        create_noise_texture(gpu);
+        create_noise_texture(ctx);
 
-        raw_shader_       = vivid::gpu::create_shader(gpu->device, kSSAORawFragment, "SSAO Raw Shader");
-        blur_shader_      = vivid::gpu::create_shader(gpu->device, kSSAOBlurFragment, "SSAO Blur Shader");
-        composite_shader_ = vivid::gpu::create_shader(gpu->device, kSSAOCompositeFragment, "SSAO Composite Shader");
+        raw_shader_       = vivid::gpu::create_shader(ctx->device, kSSAORawFragment, "SSAO Raw Shader");
+        blur_shader_      = vivid::gpu::create_shader(ctx->device, kSSAOBlurFragment, "SSAO Blur Shader");
+        composite_shader_ = vivid::gpu::create_shader(ctx->device, kSSAOCompositeFragment, "SSAO Composite Shader");
         if (!raw_shader_ || !blur_shader_ || !composite_shader_) return false;
 
-        uniform_buf_ = vivid::gpu::create_uniform_buffer(gpu->device, sizeof(SSAOUniforms), "SSAO Uniforms");
-        sampler_ = vivid::gpu::create_linear_sampler(gpu->device, "SSAO Sampler");
+        uniform_buf_ = vivid::gpu::create_uniform_buffer(ctx->device, sizeof(SSAOUniforms), "SSAO Uniforms");
+        sampler_ = vivid::gpu::create_linear_sampler(ctx->device, "SSAO Sampler");
 
         // --- Raw BGL: uniform(0) + depth_tex(1, unfilterable float) + noise_tex(2) ---
         {
@@ -592,7 +588,7 @@ private:
             bgl_desc.label = vivid_sv("SSAO Raw BGL");
             bgl_desc.entryCount = 3;
             bgl_desc.entries = entries;
-            raw_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+            raw_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
         }
 
         // --- Blur BGL: uniform(0) + ao_tex(1) + depth_tex(2, unfilterable float) ---
@@ -617,7 +613,7 @@ private:
             bgl_desc.label = vivid_sv("SSAO Blur BGL");
             bgl_desc.entryCount = 3;
             bgl_desc.entries = entries;
-            blur_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+            blur_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
         }
 
         // --- Composite BGL: uniform(0) + sampler(1) + color(2) + ao(3) ---
@@ -646,7 +642,7 @@ private:
             bgl_desc.label = vivid_sv("SSAO Composite BGL");
             bgl_desc.entryCount = 4;
             bgl_desc.entries = entries;
-            composite_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+            composite_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
         }
 
         // --- Pipeline layouts ---
@@ -655,40 +651,40 @@ private:
             pl.label = vivid_sv("SSAO Raw PL");
             pl.bindGroupLayoutCount = 1;
             pl.bindGroupLayouts = &raw_bgl_;
-            raw_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl);
+            raw_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl);
         }
         {
             WGPUPipelineLayoutDescriptor pl{};
             pl.label = vivid_sv("SSAO Blur PL");
             pl.bindGroupLayoutCount = 1;
             pl.bindGroupLayouts = &blur_bgl_;
-            blur_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl);
+            blur_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl);
         }
         {
             WGPUPipelineLayoutDescriptor pl{};
             pl.label = vivid_sv("SSAO Composite PL");
             pl.bindGroupLayoutCount = 1;
             pl.bindGroupLayouts = &composite_bgl_;
-            composite_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl);
+            composite_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl);
         }
 
         // --- Pipelines ---
         // Raw → RGBA8Unorm (stores AO in R channel, but using RGBA for simplicity)
-        raw_pipeline_ = vivid::gpu::create_pipeline(gpu->device, raw_shader_,
+        raw_pipeline_ = vivid::gpu::create_pipeline(ctx->device, raw_shader_,
                                                       raw_pipe_layout_,
                                                       WGPUTextureFormat_RGBA8Unorm,
                                                       "SSAO Raw Pipeline");
 
         // Blur → RGBA8Unorm
-        blur_pipeline_ = vivid::gpu::create_pipeline(gpu->device, blur_shader_,
+        blur_pipeline_ = vivid::gpu::create_pipeline(ctx->device, blur_shader_,
                                                        blur_pipe_layout_,
                                                        WGPUTextureFormat_RGBA8Unorm,
                                                        "SSAO Blur Pipeline");
 
         // Composite → output format
-        composite_pipeline_ = vivid::gpu::create_pipeline(gpu->device, composite_shader_,
+        composite_pipeline_ = vivid::gpu::create_pipeline(ctx->device, composite_shader_,
                                                             composite_pipe_layout_,
-                                                            gpu->output_format,
+                                                            ctx->output_format,
                                                             "SSAO Composite Pipeline");
 
         if (!raw_pipeline_ || !blur_pipeline_ || !composite_pipeline_) return false;

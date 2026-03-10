@@ -608,9 +608,8 @@ static void generate_pyramid(std::vector<vivid::gpu::Vertex3D>& verts,
 // Shape3D Operator
 // =============================================================================
 
-struct Shape3D : vivid::OperatorBase {
+struct Shape3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Shape3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     // Shape
@@ -808,16 +807,13 @@ struct Shape3D : vivid::OperatorBase {
         }
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         int cur_shape  = shape.int_value();
         int cur_detail = detail.int_value();
 
         // Rebuild geometry if shape or detail changed
         if (cur_shape != cached_shape_ || cur_detail != cached_detail_) {
-            rebuild_geometry(gpu, cur_shape, cur_detail);
+            rebuild_geometry(ctx, cur_shape, cur_detail);
             cached_shape_  = cur_shape;
             cached_detail_ = cur_detail;
         }
@@ -868,7 +864,7 @@ struct Shape3D : vivid::OperatorBase {
         fragment_.pipeline       = nullptr;
         fragment_.material_binds = nullptr;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Shape3D() override {
@@ -887,7 +883,7 @@ private:
     std::vector<vivid::gpu::Vertex3D> cpu_verts_;
     std::vector<uint32_t> cpu_indices_;
 
-    void rebuild_geometry(VividGpuState* gpu, int shape_type, int det) {
+    void rebuild_geometry(const VividGpuContext* ctx, int shape_type, int det) {
         std::vector<vivid::gpu::Vertex3D> verts;
         std::vector<uint32_t> idx;
 
@@ -913,9 +909,9 @@ private:
         index_count_ = static_cast<uint32_t>(idx.size());
 
         vertex_buffer_ = vivid::gpu::create_vertex_buffer(
-            gpu->device, gpu->queue, verts.data(), vertex_buf_size_, "Shape3D VB");
+            ctx->device, ctx->queue, verts.data(), vertex_buf_size_, "Shape3D VB");
         index_buffer_ = vivid::gpu::create_index_buffer(
-            gpu->device, gpu->queue, idx.data(), index_count_, "Shape3D IB");
+            ctx->device, ctx->queue, idx.data(), index_count_, "Shape3D IB");
     }
 };
 

@@ -6,9 +6,8 @@
 // Light3D — light source as a scene element
 // =============================================================================
 
-struct Light3D : vivid::OperatorBase {
+struct Light3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Light3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<int>   type      {"type",      0, {"Directional", "Point"}};
@@ -52,10 +51,7 @@ struct Light3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         fragment_.fragment_type   = vivid::gpu::VividSceneFragment::LIGHT;
         fragment_.light_type      = static_cast<float>(type.int_value());
         fragment_.light_color[0]  = r.value;
@@ -77,7 +73,7 @@ struct Light3D : vivid::OperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
 private:

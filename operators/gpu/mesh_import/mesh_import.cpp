@@ -20,9 +20,8 @@
 // MeshImport Operator — loads OBJ and glTF/GLB files with PBR materials
 // =============================================================================
 
-struct MeshImport : vivid::OperatorBase {
+struct MeshImport : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "MeshImport";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<vivid::FilePath> file {"file"};
@@ -85,22 +84,19 @@ struct MeshImport : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Reload if file path changed
         if (file.str_value != cached_path_) {
             cached_path_ = file.str_value;
             release_textures();
-            load_mesh(gpu);
+            load_mesh(ctx);
         }
 
         if (!vertex_buffer_ || !index_buffer_) return;
 
         // Lazy-init GPU textures on first process() after load
         if (has_gltf_material_ && !textures_inited_)
-            lazy_init_textures(gpu);
+            lazy_init_textures(ctx);
 
         // Build model matrix: T * Rz * Ry * Rx * S
         float sx = scale_x.value, sy = scale_y.value, sz = scale_z.value;
@@ -159,7 +155,7 @@ struct MeshImport : vivid::OperatorBase {
             fragment_.pipeline_flags = 0;
         }
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~MeshImport() override {
@@ -206,7 +202,7 @@ private:
     // Texture GPU upload + bind group creation
     // =========================================================================
 
-    void lazy_init_textures(VividGpuState* gpu) {
+    void lazy_init_textures(const VividGpuContext* gpu) {
         sampler_ = vivid::gpu::create_repeat_sampler(gpu->device, "MeshImport Sampler");
         tex_bind_layout_ = vivid::gpu::create_pbr_texture_bind_layout(gpu->device);
         if (!sampler_ || !tex_bind_layout_) return;
@@ -347,7 +343,7 @@ private:
         return FMT_UNKNOWN;
     }
 
-    void load_mesh(VividGpuState* gpu) {
+    void load_mesh(const VividGpuContext* gpu) {
         vivid::gpu::release(vertex_buffer_);
         vivid::gpu::release(index_buffer_);
         cpu_verts_.clear();

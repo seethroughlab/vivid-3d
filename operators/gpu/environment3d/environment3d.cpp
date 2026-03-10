@@ -410,9 +410,8 @@ static constexpr uint32_t kBrdfLutSize = 256;
 static constexpr WGPUTextureFormat kHdrFormat = WGPUTextureFormat_RGBA16Float;
 static constexpr WGPUTextureFormat kBrdfFormat = WGPUTextureFormat_RG16Float;
 
-struct Environment3D : vivid::OperatorBase {
+struct Environment3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Environment3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> intensity {"intensity", 1.0f, 0.0f, 10.0f};
@@ -430,14 +429,11 @@ struct Environment3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Check for input texture (equirectangular panorama)
         WGPUTextureView input_view = nullptr;
-        if (gpu->input_texture_count > 0 && gpu->input_texture_views)
-            input_view = gpu->input_texture_views[0];
+        if (ctx->input_texture_count > 0 && ctx->input_texture_views)
+            input_view = ctx->input_texture_views[0];
 
         if (!input_view) {
             // No input — output empty environment fragment
@@ -447,12 +443,12 @@ struct Environment3D : vivid::OperatorBase {
             fragment_.ibl_brdf_lut    = nullptr;
             fragment_.ibl_sampler     = nullptr;
             fragment_.ibl_intensity   = 0.0f;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
         // Lazy init GPU resources
-        if (!initialized_ && !lazy_init(gpu)) {
+        if (!initialized_ && !lazy_init(ctx)) {
             std::fprintf(stderr, "[environment3d] lazy_init FAILED\n");
             return;
         }
@@ -463,7 +459,7 @@ struct Environment3D : vivid::OperatorBase {
         if (input_view != cached_input_view_ || rotation_bits != cached_rotation_bits_) {
             cached_input_view_ = input_view;
             cached_rotation_bits_ = rotation_bits;
-            precompute_ibl(gpu, input_view, rotation_y.value);
+            precompute_ibl(ctx, input_view, rotation_y.value);
         }
 
         // Output fragment
@@ -484,7 +480,7 @@ struct Environment3D : vivid::OperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Environment3D() override {
@@ -558,7 +554,7 @@ private:
     WGPUTexture     brdf_lut_tex_  = nullptr;
     WGPUTextureView brdf_lut_view_ = nullptr;
 
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* gpu) {
         // Sampler
         linear_clamp_sampler_ = vivid::gpu::create_clamp_linear_sampler(
             gpu->device, "Env3D Linear Clamp Sampler");
@@ -758,7 +754,7 @@ private:
         return wgpuDeviceCreateRenderPipeline(device, &rp);
     }
 
-    void render_face_pass(VividGpuState* gpu, WGPURenderPipeline pipeline,
+    void render_face_pass(const VividGpuContext* gpu, WGPURenderPipeline pipeline,
                           WGPUBindGroup bg, WGPUTextureView target,
                           uint32_t size, const char* label) {
         WGPURenderPassColorAttachment ca{};
@@ -784,7 +780,7 @@ private:
         wgpuRenderPassEncoderRelease(pass);
     }
 
-    void precompute_ibl(VividGpuState* gpu, WGPUTextureView input_view, float rotation_deg) {
+    void precompute_ibl(const VividGpuContext* gpu, WGPUTextureView input_view, float rotation_deg) {
         uint32_t rotation_bits = 0;
         std::memcpy(&rotation_bits, &rotation_deg, sizeof(uint32_t));
         // Step 1: Equirect → Unfiltered cubemap
@@ -893,7 +889,7 @@ private:
         }
     }
 
-    void compute_brdf_lut(VividGpuState* gpu) {
+    void compute_brdf_lut(const VividGpuContext* gpu) {
         // Empty bind group (BRDF LUT has no external inputs)
         WGPUBindGroupDescriptor bg_desc{};
         bg_desc.label = vivid_sv("Env3D BRDF BG");

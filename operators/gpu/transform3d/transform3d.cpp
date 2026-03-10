@@ -8,9 +8,8 @@
 // Transform3D — scene-in, scene-out with TRS transform
 // =============================================================================
 
-struct Transform3D : vivid::OperatorBase {
+struct Transform3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Transform3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> pos_x   {"pos_x",   0.0f, -50.0f, 50.0f};
@@ -85,13 +84,10 @@ struct Transform3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // No input scene → no output
-        bool has_input = gpu->input_data_count > 0 &&
-                         vivid::gpu::scene_input(gpu, 0) != nullptr;
+        bool has_input = ctx->input_data_count > 0 &&
+                         vivid::gpu::scene_input(ctx, 0) != nullptr;
         if (!has_input) return;
 
         // Build TRS matrix: T * Rz * Ry * Rx * S (same order as Shape3D)
@@ -116,11 +112,11 @@ struct Transform3D : vivid::OperatorBase {
         output_.fragment_type   = vivid::gpu::VividSceneFragment::GEOMETRY;
 
         // Wrap input as child
-        child_ = vivid::gpu::scene_input(gpu, 0);
+        child_ = vivid::gpu::scene_input(ctx, 0);
         output_.children    = &child_;
         output_.child_count = 1;
 
-        gpu->output_data = &output_;
+        ctx->output_data[0] = &output_;
     }
 
 private:

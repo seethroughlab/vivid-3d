@@ -343,9 +343,8 @@ fn fs_main(in: SDFVertexOutput) -> SDFFragOutput {
 
 static constexpr float kTAU = 6.28318530717958647692f;
 
-struct SDF3D : vivid::OperatorBase {
+struct SDF3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "SDF3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     // Shape A
@@ -466,12 +465,9 @@ struct SDF3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (!pipeline_) {
-            if (!lazy_init(gpu)) {
+            if (!lazy_init(ctx)) {
                 std::fprintf(stderr, "[sdf3d] lazy_init FAILED\n");
                 return;
             }
@@ -529,7 +525,7 @@ struct SDF3D : vivid::OperatorBase {
         std::memcpy(params_data.inv_model, inv_model, 64);
         params_data.max_steps        = static_cast<float>(max_steps.int_value());
         params_data.surface_threshold = threshold.value;
-        wgpuQueueWriteBuffer(gpu->queue, params_ubo_, 0, &params_data, sizeof(params_data));
+        wgpuQueueWriteBuffer(ctx->queue, params_ubo_, 0, &params_data, sizeof(params_data));
 
         // Upload default directional light
         SDFLightsUniform lights{};
@@ -548,7 +544,7 @@ struct SDF3D : vivid::OperatorBase {
         lights.lights[0].color_and_radius[1] = 1.0f;
         lights.lights[0].color_and_radius[2] = 1.0f;
         lights.lights[0].color_and_radius[3] = 10.0f;
-        wgpuQueueWriteBuffer(gpu->queue, lights_ubo_, 0, &lights, sizeof(lights));
+        wgpuQueueWriteBuffer(ctx->queue, lights_ubo_, 0, &lights, sizeof(lights));
 
         // Output scene fragment
         vivid::gpu::scene_fragment_identity(fragment_);
@@ -572,7 +568,7 @@ struct SDF3D : vivid::OperatorBase {
         fragment_.emission  = emission.value;
         fragment_.unlit     = unlit.int_value() != 0;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~SDF3D() override {
@@ -603,20 +599,20 @@ private:
     WGPUBuffer quad_vb_    = nullptr;
     WGPUBuffer quad_ib_    = nullptr;
 
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* ctx) {
         // Compile shader
         std::string src = std::string(vivid::gpu::CUSTOM_CAMERA_3D_WGSL)
                         + kSDF3DShader;
-        shader_ = vivid::gpu::create_wgsl_shader(gpu->device, src.c_str(), "SDF3D Shader");
+        shader_ = vivid::gpu::create_wgsl_shader(ctx->device, src.c_str(), "SDF3D Shader");
         if (!shader_) return false;
 
         // UBO buffers
         camera_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(vivid::gpu::CustomCamera3D), "SDF3D Camera UBO");
+            ctx->device, sizeof(vivid::gpu::CustomCamera3D), "SDF3D Camera UBO");
         params_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(SDFParamsUniform), "SDF3D Params UBO");
+            ctx->device, sizeof(SDFParamsUniform), "SDF3D Params UBO");
         lights_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(SDFLightsUniform), "SDF3D Lights UBO");
+            ctx->device, sizeof(SDFLightsUniform), "SDF3D Lights UBO");
 
         // Bind group layout
         WGPUBindGroupLayoutEntry entries[3]{};
@@ -639,14 +635,14 @@ private:
         bgl_desc.label = vivid_sv("SDF3D BGL");
         bgl_desc.entryCount = 3;
         bgl_desc.entries = entries;
-        bind_layout_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+        bind_layout_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
 
         // Pipeline layout
         WGPUPipelineLayoutDescriptor pl_desc{};
         pl_desc.label = vivid_sv("SDF3D Pipeline Layout");
         pl_desc.bindGroupLayoutCount = 1;
         pl_desc.bindGroupLayouts = &bind_layout_;
-        pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl_desc);
+        pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl_desc);
 
         // Bind group
         WGPUBindGroupEntry bg_entries[3]{};
@@ -670,30 +666,30 @@ private:
         bg_desc.layout = bind_layout_;
         bg_desc.entryCount = 3;
         bg_desc.entries = bg_entries;
-        bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
+        bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &bg_desc);
 
         // Render pipeline
         WGPUVertexBufferLayout vbl = vivid::gpu::vertex3d_layout();
         vivid::gpu::Pipeline3DDesc pd{};
         pd.shader = shader_;
         pd.layout = pipe_layout_;
-        pd.color_format = gpu->output_format;
+        pd.color_format = ctx->output_format;
         pd.vertex_layouts = &vbl;
         pd.vertex_layout_count = 1;
         pd.cull_mode = WGPUCullMode_None;
         pd.depth_write = true;
         pd.depth_compare = WGPUCompareFunction_Less;
         pd.label = "SDF3D Pipeline";
-        pipeline_ = vivid::gpu::create_3d_pipeline(gpu->device, pd);
+        pipeline_ = vivid::gpu::create_3d_pipeline(ctx->device, pd);
         if (!pipeline_) return false;
 
         // NDC fullscreen quad
-        create_fullscreen_quad(gpu);
+        create_fullscreen_quad(ctx);
 
         return true;
     }
 
-    void create_fullscreen_quad(VividGpuState* gpu) {
+    void create_fullscreen_quad(const VividGpuContext* ctx) {
         vivid::gpu::Vertex3D verts[4]{};
 
         // (-1,-1,0) bottom-left
@@ -721,11 +717,11 @@ private:
         verts[3].uv[0] = 0; verts[3].uv[1] = 1;
 
         quad_vb_ = vivid::gpu::create_vertex_buffer(
-            gpu->device, gpu->queue, verts, sizeof(verts), "SDF3D Quad VB");
+            ctx->device, ctx->queue, verts, sizeof(verts), "SDF3D Quad VB");
 
         uint32_t indices[6] = { 0, 1, 2, 0, 2, 3 };
         quad_ib_ = vivid::gpu::create_index_buffer(
-            gpu->device, gpu->queue, indices, 6, "SDF3D Quad IB");
+            ctx->device, ctx->queue, indices, 6, "SDF3D Quad IB");
     }
 };
 

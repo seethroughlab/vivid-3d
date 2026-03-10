@@ -706,20 +706,21 @@ inline WGPUSampler create_clamp_linear_sampler(WGPUDevice device, const char* la
 }
 
 // ---------------------------------------------------------------------------
-// Port declaration helper — creates a VIVID_PORT_DATA port with data_type "gpu_scene"
+// Port declaration helper — creates a VIVID_PORT_DATA port with data_type "vivid3d.gpu_scene".
+// The qualified prefix prevents silent cross-package mismatches at the scheduler level.
 // ---------------------------------------------------------------------------
 
 inline VividPortDescriptor scene_port(const char* name, VividPortDirection dir) {
-    return {name, VIVID_PORT_DATA, dir, "gpu_scene"};
+    return {name, VIVID_PORT_DATA, dir, "vivid3d.gpu_scene"};
 }
 
 // ---------------------------------------------------------------------------
 // Typed input accessor — casts void* → VividSceneFragment*
 // ---------------------------------------------------------------------------
 
-inline VividSceneFragment* scene_input(const VividGpuState* gpu, uint32_t idx) {
-    if (!gpu->input_data || idx >= gpu->input_data_count) return nullptr;
-    return static_cast<VividSceneFragment*>(gpu->input_data[idx]);
+inline VividSceneFragment* scene_input(const VividGpuContext* ctx, uint32_t idx) {
+    if (!ctx->input_data || idx >= ctx->input_data_count) return nullptr;
+    return static_cast<VividSceneFragment*>(ctx->input_data[idx]);
 }
 
 } // namespace vivid::gpu

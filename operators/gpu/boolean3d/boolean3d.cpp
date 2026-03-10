@@ -138,9 +138,8 @@ static manifold::MeshGL build_meshgl(const VividSceneFragment* frag) {
 // Boolean3D Operator
 // =============================================================================
 
-struct Boolean3D : vivid::OperatorBase {
+struct Boolean3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Boolean3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<int>   operation    {"operation", 0, {"Union", "Subtract", "Intersect"}};
@@ -159,13 +158,10 @@ struct Boolean3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene",   VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Resolve inputs: scene_a = port 0, scene_b = port 1
-        const VividSceneFragment* a = vivid::gpu::scene_input(gpu, 0);
-        const VividSceneFragment* b = vivid::gpu::scene_input(gpu, 1);
+        const VividSceneFragment* a = vivid::gpu::scene_input(ctx, 0);
+        const VividSceneFragment* b = vivid::gpu::scene_input(ctx, 1);
 
         // Validate: need both inputs with CPU geometry
         if (!a || !a->cpu_vertices || !a->cpu_indices ||
@@ -178,7 +174,7 @@ struct Boolean3D : vivid::OperatorBase {
             b->cpu_vertex_count == 0 || b->cpu_index_count == 0) {
             // No valid input B — pass through A
             fragment_ = *a;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -207,7 +203,7 @@ struct Boolean3D : vivid::OperatorBase {
             fragment_.metallic  = a->metallic;
             fragment_.emission  = a->emission;
             fragment_.unlit     = a->unlit;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -220,7 +216,7 @@ struct Boolean3D : vivid::OperatorBase {
         if (man_a.Status() != manifold::Manifold::Error::NoError) {
             // Non-manifold input A — pass through unchanged
             fragment_ = *a;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -228,7 +224,7 @@ struct Boolean3D : vivid::OperatorBase {
         if (man_b.Status() != manifold::Manifold::Error::NoError) {
             // Non-manifold input B — pass through A
             fragment_ = *a;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -244,7 +240,7 @@ struct Boolean3D : vivid::OperatorBase {
         if (result.Status() != manifold::Manifold::Error::NoError) {
             // Boolean failed — pass through A
             fragment_ = *a;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -256,7 +252,7 @@ struct Boolean3D : vivid::OperatorBase {
 
         if (out_mesh.triVerts.empty()) {
             fragment_ = *a;
-            gpu->output_data = &fragment_;
+            ctx->output_data[0] = &fragment_;
             return;
         }
 
@@ -334,9 +330,9 @@ struct Boolean3D : vivid::OperatorBase {
         vivid::gpu::release(index_buffer_);
 
         vertex_buffer_ = create_vertex_buffer(
-            gpu->device, gpu->queue, cpu_verts_.data(), vertex_buf_size_, "Boolean3D VB");
+            ctx->device, ctx->queue, cpu_verts_.data(), vertex_buf_size_, "Boolean3D VB");
         index_buffer_ = create_index_buffer(
-            gpu->device, gpu->queue, cpu_indices_.data(), index_count_, "Boolean3D IB");
+            ctx->device, ctx->queue, cpu_indices_.data(), index_count_, "Boolean3D IB");
 
         // Cache state
         cached_a_     = a;
@@ -368,7 +364,7 @@ struct Boolean3D : vivid::OperatorBase {
         fragment_.pipeline       = nullptr;
         fragment_.material_binds = nullptr;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Boolean3D() override {

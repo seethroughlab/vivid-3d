@@ -2,9 +2,8 @@
 #include "operator_api/input_state.h"
 #include <cmath>
 
-struct OrbitCamera : vivid::OperatorBase {
+struct OrbitCamera : vivid::ControlOperatorBase {
     static constexpr const char* kName   = "OrbitCamera";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_CONTROL;
     static constexpr bool kTimeDependent = true;
 
     // Orbit

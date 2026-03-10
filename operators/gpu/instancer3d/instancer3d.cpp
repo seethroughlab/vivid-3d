@@ -10,9 +10,8 @@
 // Instancer3D Operator — renders one mesh N times with per-instance transforms
 // =============================================================================
 
-struct Instancer3D : vivid::OperatorBase {
+struct Instancer3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Instancer3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<int>   count   {"count",   16, 1, 4096};
@@ -44,13 +43,11 @@ struct Instancer3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
+    void process_gpu(const VividGpuContext* ctx) override {
 
         // Check input scene
-        if (gpu->input_data_count == 0 || !vivid::gpu::scene_input(gpu, 0)) return;
-        const auto* input = vivid::gpu::scene_input(gpu, 0);
+        if (ctx->input_data_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
+        const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->vertex_buffer || input->index_count == 0) return;
 
         // Read spreads (input port indices: scene=0, positions=1, scales=2, colors=3,
@@ -217,10 +214,10 @@ struct Instancer3D : vivid::OperatorBase {
         if (buf_size < 48) buf_size = 48;
 
         if (n != current_count_) {
-            rebuild_storage(gpu, n, buf_size);
+            rebuild_storage(ctx, n, buf_size);
         }
         if (storage_buf_) {
-            wgpuQueueWriteBuffer(gpu->queue, storage_buf_, 0,
+            wgpuQueueWriteBuffer(ctx->queue, storage_buf_, 0,
                                  instances_.data(), n * sizeof(vivid::gpu::InstanceData3D));
         }
 
@@ -229,7 +226,7 @@ struct Instancer3D : vivid::OperatorBase {
         fragment_.instance_buffer = storage_buf_;
         fragment_.instance_count  = n;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Instancer3D() override {
@@ -271,7 +268,7 @@ private:
         color[3] = 1.0f;
     }
 
-    void rebuild_storage(VividGpuState* gpu, uint32_t count, uint32_t buf_size) {
+    void rebuild_storage(const VividGpuContext* ctx, uint32_t count, uint32_t buf_size) {
         vivid::gpu::release(storage_buf_);
         current_count_ = count;
 
@@ -281,7 +278,7 @@ private:
         desc.label = vivid_sv("Instancer3D Storage");
         desc.size  = buf_size;
         desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-        storage_buf_ = wgpuDeviceCreateBuffer(gpu->device, &desc);
+        storage_buf_ = wgpuDeviceCreateBuffer(ctx->device, &desc);
     }
 };
 

@@ -315,9 +315,8 @@ static_assert(sizeof(ParamsData) == 96, "ParamsData must be 96 bytes");
 // Particles3D Operator
 // =============================================================================
 
-struct Particles3D : vivid::OperatorBase {
+struct Particles3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Particles3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     // Emission
@@ -418,16 +417,13 @@ struct Particles3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         uint32_t max_count = static_cast<uint32_t>(count.int_value());
         if (max_count == 0) max_count = 1;
 
         // Rebuild GPU resources if count changed
         if (max_count != current_count_ || !compute_pipeline_) {
-            rebuild_gpu_resources(gpu, max_count);
+            rebuild_gpu_resources(ctx, max_count);
         }
         if (!compute_pipeline_) return;
 
@@ -466,17 +462,17 @@ struct Particles3D : vivid::OperatorBase {
         params.shape          = beginner ? 0u : static_cast<uint32_t>(shape.int_value());
         params.learning_mode  = beginner ? 1u : 0u;
         params.bounds         = bounds.value;
-        wgpuQueueWriteBuffer(gpu->queue, params_ubo_, 0, &params, sizeof(params));
+        wgpuQueueWriteBuffer(ctx->queue, params_ubo_, 0, &params, sizeof(params));
 
         // Reset atomic counter to 0
         uint32_t zero = 0;
-        wgpuQueueWriteBuffer(gpu->queue, counter_buf_, 0, &zero, sizeof(zero));
+        wgpuQueueWriteBuffer(ctx->queue, counter_buf_, 0, &zero, sizeof(zero));
 
         // Run compute pass
         WGPUComputePassDescriptor cp_desc{};
         cp_desc.label = vivid_sv("Particles3D Compute");
         WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(
-            gpu->command_encoder, &cp_desc);
+            ctx->command_encoder, &cp_desc);
         wgpuComputePassEncoderSetPipeline(pass, compute_pipeline_);
         wgpuComputePassEncoderSetBindGroup(pass, 0,
             ping_ ? bind_group_a_ : bind_group_b_, 0, nullptr);
@@ -495,7 +491,7 @@ struct Particles3D : vivid::OperatorBase {
         fragment_.cast_shadow     = false;
 
         // Use input scene geometry if connected, otherwise fall back to built-in shapes
-        auto* scene_in = vivid::gpu::scene_input(gpu, 0);
+        auto* scene_in = vivid::gpu::scene_input(ctx, 0);
         if (scene_in && scene_in->vertex_buffer && scene_in->index_count > 0) {
             const auto* input = scene_in;
             fragment_.vertex_buffer   = input->vertex_buffer;
@@ -534,7 +530,7 @@ struct Particles3D : vivid::OperatorBase {
         fragment_.roughness = 0.5f;
         fragment_.metallic  = 0.0f;
 
-        gpu->output_data = &fragment_;
+        ctx->output_data[0] = &fragment_;
     }
 
     ~Particles3D() override {
@@ -589,7 +585,7 @@ private:
     uint32_t frame_counter_     = 0;
     float    elapsed_time_      = 0.0f;
 
-    void rebuild_gpu_resources(VividGpuState* gpu, uint32_t max_count) {
+    void rebuild_gpu_resources(const VividGpuContext* gpu, uint32_t max_count) {
         // Release existing resources
         vivid::gpu::release(compute_pipeline_);
         vivid::gpu::release(compute_shader_);
@@ -722,7 +718,7 @@ private:
                           particle_buf_size, &bind_group_b_, "Particles3D BG B");
     }
 
-    void create_bind_group(VividGpuState* gpu,
+    void create_bind_group(const VividGpuContext* gpu,
                            WGPUBuffer read_buf, WGPUBuffer write_buf,
                            uint64_t particle_buf_size,
                            WGPUBindGroup* out_bg, const char* label) {
@@ -763,7 +759,7 @@ private:
         *out_bg = wgpuDeviceCreateBindGroup(gpu->device, &desc);
     }
 
-    void create_billboard_quad(VividGpuState* gpu) {
+    void create_billboard_quad(const VividGpuContext* gpu) {
         // Unit quad in XY plane centered at origin
         vivid::gpu::Vertex3D verts[4]{};
 
@@ -799,7 +795,7 @@ private:
             gpu->device, gpu->queue, indices, 6, "Particles3D Quad IB");
     }
 
-    void create_box_mesh(VividGpuState* gpu) {
+    void create_box_mesh(const VividGpuContext* gpu) {
         using V = vivid::gpu::Vertex3D;
 
         // Face data: normal, tangent, then 4 corner positions

@@ -1135,9 +1135,8 @@ static void collect_fragments(const vivid::gpu::VividSceneFragment* node,
 // Render3D Operator
 // =============================================================================
 
-struct Render3D : vivid::OperatorBase {
+struct Render3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Render3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     // Camera params
@@ -1239,33 +1238,30 @@ struct Render3D : vivid::OperatorBase {
         out.push_back({"depth",   VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (cached_format_ == WGPUTextureFormat_Undefined) {
-            if (!lazy_init(gpu)) {
+            if (!lazy_init(ctx)) {
                 std::fprintf(stderr, "[render_3d] lazy_init FAILED\n");
                 return;
             }
         }
 
         // Invalidate pipeline cache if output format changed
-        if (gpu->output_format != cached_format_) {
+        if (ctx->output_format != cached_format_) {
             for (auto& [f, p] : pipeline_cache_) vivid::gpu::release(p);
             pipeline_cache_.clear();
-            cached_format_ = gpu->output_format;
+            cached_format_ = ctx->output_format;
         }
 
-        uint32_t w = gpu->output_width;
-        uint32_t h = gpu->output_height;
+        uint32_t w = ctx->output_width;
+        uint32_t h = ctx->output_height;
 
         // Recreate depth buffer if output size changed
         if (w != cached_w_ || h != cached_h_) {
             vivid::gpu::release(depth_view_);
             vivid::gpu::release(depth_tex_);
             // Phase 6e: use shadow_map variant for TextureBinding usage (needed for depth blit)
-            depth_tex_ = vivid::gpu::create_shadow_map_texture(gpu->device, w, h, "Render3D Depth");
+            depth_tex_ = vivid::gpu::create_shadow_map_texture(ctx->device, w, h, "Render3D Depth");
             depth_view_ = vivid::gpu::create_depth_view(depth_tex_, "Render3D Depth View");
 
             // Phase 6e: R32Float depth output texture
@@ -1281,7 +1277,7 @@ struct Render3D : vivid::OperatorBase {
                 td.format = WGPUTextureFormat_R32Float;
                 td.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding
                          | WGPUTextureUsage_CopySrc;
-                depth_out_tex_ = wgpuDeviceCreateTexture(gpu->device, &td);
+                depth_out_tex_ = wgpuDeviceCreateTexture(ctx->device, &td);
 
                 WGPUTextureViewDescriptor vd{};
                 vd.label = vivid_sv("Render3D Depth Out R32F View");
@@ -1313,24 +1309,25 @@ struct Render3D : vivid::OperatorBase {
         WGPUColor clear_color = { bg_r.value, bg_g.value, bg_b.value, bg_a.value };
 
         // Check if we have a scene connected
-        bool has_scene = vivid::gpu::scene_input(gpu, 0) != nullptr;
+        bool has_scene = vivid::gpu::scene_input(ctx, 0) != nullptr;
 
         // Lambda to run depth blit and set output (shared by early returns + main path)
         auto blit_depth_output = [&]() {
             if (depth_blit_pipeline_ && depth_out_view_) {
-                rebuild_depth_blit_bg_if_needed(gpu);
+                rebuild_depth_blit_bg_if_needed(ctx);
                 if (depth_blit_bg_) {
-                    vivid::gpu::run_pass(gpu->command_encoder, depth_blit_pipeline_,
+                    vivid::gpu::run_pass(ctx->command_encoder, depth_blit_pipeline_,
                                          depth_blit_bg_, depth_out_view_,
                                          "Depth Blit", {0, 0, 0, 0});
                 }
-                gpu->output_depth_view = depth_out_view_;
+                if (ctx->aux_output_texture_count > 0)
+                    ctx->aux_output_texture_views[0] = depth_out_view_;
             }
         };
 
         if (!has_scene) {
             WGPURenderPassEncoder pass = vivid::gpu::begin_3d_pass(
-                gpu->command_encoder, gpu->output_texture_view, depth_view_,
+                ctx->command_encoder, ctx->output_texture_view, depth_view_,
                 "Render3D Clear", clear_color);
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
@@ -1344,12 +1341,12 @@ struct Render3D : vivid::OperatorBase {
         const vivid::gpu::VividSceneFragment* env = nullptr;
         mat4x4 identity;
         mat4x4_identity(identity);
-        collect_fragments(vivid::gpu::scene_input(gpu, 0), identity, draws, collected_lights,
+        collect_fragments(vivid::gpu::scene_input(ctx, 0), identity, draws, collected_lights,
                          nullptr, &env);
 
         if (draws.empty()) {
             WGPURenderPassEncoder pass = vivid::gpu::begin_3d_pass(
-                gpu->command_encoder, gpu->output_texture_view, depth_view_,
+                ctx->command_encoder, ctx->output_texture_view, depth_view_,
                 "Render3D Clear", clear_color);
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
@@ -1367,7 +1364,7 @@ struct Render3D : vivid::OperatorBase {
                 vivid::gpu::perspective_wgpu(proj, fov.value * 3.14159265f / 180.f,
                                               aspect, near_p.value, far_p.value);
                 mat4x4_mul(vp, proj, view);
-                render_skybox(gpu, env, vp, eye_pos);
+                render_skybox(ctx, env, vp, eye_pos);
             }
 
             blit_depth_output();
@@ -1411,7 +1408,7 @@ struct Render3D : vivid::OperatorBase {
             ld.color_and_radius[2] = cl.color[2];
             ld.color_and_radius[3] = cl.radius;
         }
-        wgpuQueueWriteBuffer(gpu->queue, lights_ubo_, 0, &lights_data, sizeof(lights_data));
+        wgpuQueueWriteBuffer(ctx->queue, lights_ubo_, 0, &lights_data, sizeof(lights_data));
 
         // ---- Phase 6d: Shadow pre-pass ----
         ShadowUniform shadow_data{};
@@ -1424,7 +1421,7 @@ struct Render3D : vivid::OperatorBase {
         if (shadows_active) {
             uint32_t sres = static_cast<uint32_t>(shadow_resolution.value);
             if (sres < 64) sres = 64;
-            ensure_shadow_maps(gpu, sres);
+            ensure_shadow_maps(ctx, sres);
 
             // Count directional lights and run shadow passes
             for (uint32_t li = 0; li < lights_data.light_count && li < kMaxLights; ++li) {
@@ -1447,11 +1444,11 @@ struct Render3D : vivid::OperatorBase {
                     CameraUniform shadow_cam{};
                     std::memcpy(shadow_cam.mvp, shadow_mvp, 64);
                     std::memcpy(shadow_cam.model, dc.composed_model, 64);
-                    wgpuQueueWriteBuffer(gpu->queue, shadow_camera_ubo_,
+                    wgpuQueueWriteBuffer(ctx->queue, shadow_camera_ubo_,
                                          di * kCameraSlotStride, &shadow_cam, sizeof(shadow_cam));
                 }
 
-                render_shadow_pass(gpu, draws, dir_shadow_view_, sres, sres,
+                render_shadow_pass(ctx, draws, dir_shadow_view_, sres, sres,
                                    "Render3D Shadow Pass");
 
                 dir_shadow_count++;
@@ -1460,7 +1457,7 @@ struct Render3D : vivid::OperatorBase {
         }
 
         shadow_data.shadow_count_dir = dir_shadow_count;
-        wgpuQueueWriteBuffer(gpu->queue, shadow_ubo_, 0, &shadow_data, sizeof(shadow_data));
+        wgpuQueueWriteBuffer(ctx->queue, shadow_ubo_, 0, &shadow_data, sizeof(shadow_data));
 
         // Phase 6f: IBL environment data
         bool has_ibl = env && env->ibl_irradiance && env->ibl_prefiltered && env->ibl_brdf_lut;
@@ -1468,9 +1465,9 @@ struct Render3D : vivid::OperatorBase {
             IBLUniform ibl_data{};
             ibl_data.intensity = has_ibl ? env->ibl_intensity : 0.0f;
             ibl_data.has_environment = has_ibl ? 1.0f : 0.0f;
-            wgpuQueueWriteBuffer(gpu->queue, ibl_ubo_, 0, &ibl_data, sizeof(ibl_data));
+            wgpuQueueWriteBuffer(ctx->queue, ibl_ubo_, 0, &ibl_data, sizeof(ibl_data));
         }
-        if (has_ibl) rebuild_ibl_bind_group(gpu, env);
+        if (has_ibl) rebuild_ibl_bind_group(ctx, env);
 
         // Write per-draw uniforms (camera UBO with real camera data for main pass)
         for (uint32_t i = 0; i < static_cast<uint32_t>(draws.size()); ++i) {
@@ -1490,7 +1487,7 @@ struct Render3D : vivid::OperatorBase {
             cam.camera_pos[1] = eye[1];
             cam.camera_pos[2] = eye[2];
             cam._pad = 0.0f;
-            wgpuQueueWriteBuffer(gpu->queue, camera_ubo_,
+            wgpuQueueWriteBuffer(ctx->queue, camera_ubo_,
                                  i * kCameraSlotStride, &cam, sizeof(cam));
 
             // Phase 6c: material override provides properties when present
@@ -1511,7 +1508,7 @@ struct Render3D : vivid::OperatorBase {
             mat.fog_color[1] = fog_color_g.value;
             mat.fog_color[2] = fog_color_b.value;
             mat.fog_density  = fog_density.value;
-            wgpuQueueWriteBuffer(gpu->queue, material_ubo_,
+            wgpuQueueWriteBuffer(ctx->queue, material_ubo_,
                                  i * kMaterialSlotStride, &mat, sizeof(mat));
 
             // Custom pipeline camera injection (SDF3D etc.)
@@ -1528,14 +1525,14 @@ struct Render3D : vivid::OperatorBase {
                 ccam.far_plane     = far_p.value;
                 ccam.resolution[0] = static_cast<float>(w);
                 ccam.resolution[1] = static_cast<float>(h);
-                wgpuQueueWriteBuffer(gpu->queue, dc.frag->custom_camera_ubo,
+                wgpuQueueWriteBuffer(ctx->queue, dc.frag->custom_camera_ubo,
                                      0, &ccam, sizeof(ccam));
             }
         }
 
         // One render pass with multiple draws using dynamic offsets
         WGPURenderPassEncoder pass = vivid::gpu::begin_3d_pass(
-            gpu->command_encoder, gpu->output_texture_view, depth_view_,
+            ctx->command_encoder, ctx->output_texture_view, depth_view_,
             "Render3D Pass", clear_color);
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(draws.size()); ++i) {
@@ -1581,7 +1578,7 @@ struct Render3D : vivid::OperatorBase {
                 flags |= vivid::gpu::kPipelineIBL;
             }
 
-            auto active = get_or_create_pipeline(gpu, flags);
+            auto active = get_or_create_pipeline(ctx, flags);
             if (!active) continue;
 
             wgpuRenderPassEncoderSetPipeline(pass, active);
@@ -1589,7 +1586,7 @@ struct Render3D : vivid::OperatorBase {
 
             if (instanced) {
                 if (dc.instance_buffer != cached_inst_buf_) {
-                    rebuild_instanced_bind_group(gpu, dc.instance_buffer);
+                    rebuild_instanced_bind_group(ctx, dc.instance_buffer);
                 }
                 wgpuRenderPassEncoderSetBindGroup(pass, 1, inst_bind_group_, 0, nullptr);
             } else if (is_textured) {
@@ -1625,7 +1622,7 @@ struct Render3D : vivid::OperatorBase {
 
         // Phase 6f: skybox pass (after geometry, before depth blit)
         if (has_ibl && skybox_pipeline_ && env->ibl_prefiltered) {
-            render_skybox(gpu, env, vp, eye);
+            render_skybox(ctx, env, vp, eye);
         }
 
         // Phase 6e: blit depth and set output
@@ -1801,7 +1798,7 @@ private:
     WGPUTextureView     shadow_color_view_     = nullptr;
 
     // Phase 6e: rebuild depth blit bind group when depth view changes
-    void rebuild_depth_blit_bg_if_needed(VividGpuState* gpu) {
+    void rebuild_depth_blit_bg_if_needed(const VividGpuContext* ctx) {
         if (!depth_blit_bg_dirty_ && depth_blit_bg_) return;
 
         vivid::gpu::release(depth_blit_bg_);
@@ -1826,13 +1823,13 @@ private:
         desc.layout = depth_blit_bgl_;
         desc.entryCount = 2;
         desc.entries = entries;
-        depth_blit_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+        depth_blit_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
 
         wgpuTextureViewRelease(depth_sample);
         depth_blit_bg_dirty_ = false;
     }
 
-    void rebuild_instanced_bind_group(VividGpuState* gpu, WGPUBuffer inst_buf) {
+    void rebuild_instanced_bind_group(const VividGpuContext* ctx, WGPUBuffer inst_buf) {
         vivid::gpu::release(inst_bind_group_);
         cached_inst_buf_ = inst_buf;
 
@@ -1850,11 +1847,11 @@ private:
         desc.layout     = inst_bind_layout_;
         desc.entryCount = 1;
         desc.entries    = &entry;
-        inst_bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+        inst_bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
     }
 
     // Phase 6f: rebuild IBL bind group with environment's texture views
-    void rebuild_ibl_bind_group(VividGpuState* gpu,
+    void rebuild_ibl_bind_group(const VividGpuContext* ctx,
                                  const vivid::gpu::VividSceneFragment* env) {
         vivid::gpu::release(ibl_bind_group_);
 
@@ -1877,11 +1874,11 @@ private:
         desc.layout = ibl_bind_layout_;
         desc.entryCount = 5;
         desc.entries = entries;
-        ibl_bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+        ibl_bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
     }
 
     // Phase 6d: Ensure shadow map textures are the right size
-    void ensure_shadow_maps(VividGpuState* gpu, uint32_t res) {
+    void ensure_shadow_maps(const VividGpuContext* ctx, uint32_t res) {
         if (res == cached_shadow_res_ && dir_shadow_tex_) return;
 
         vivid::gpu::release(dir_shadow_tex_);
@@ -1891,7 +1888,7 @@ private:
         vivid::gpu::release(shadow_color_view_);
 
         dir_shadow_tex_ = vivid::gpu::create_shadow_map_texture(
-            gpu->device, res, res, "Render3D Dir Shadow Map");
+            ctx->device, res, res, "Render3D Dir Shadow Map");
         dir_shadow_view_ = vivid::gpu::create_depth_view(dir_shadow_tex_,
             "Render3D Dir Shadow Render View");
         {
@@ -1916,7 +1913,7 @@ private:
             td.dimension = WGPUTextureDimension_2D;
             td.format = WGPUTextureFormat_R8Unorm;
             td.usage = WGPUTextureUsage_RenderAttachment;
-            shadow_color_tex_ = wgpuDeviceCreateTexture(gpu->device, &td);
+            shadow_color_tex_ = wgpuDeviceCreateTexture(ctx->device, &td);
 
             WGPUTextureViewDescriptor vd{};
             vd.label = vivid_sv("Render3D Shadow Scratch Color View");
@@ -1928,11 +1925,11 @@ private:
         }
 
         cached_shadow_res_ = res;
-        rebuild_bind_group(gpu);
+        rebuild_bind_group(ctx);
     }
 
     // Phase 6d: Recreate bind_group_ with current shadow texture view
-    void rebuild_bind_group(VividGpuState* gpu) {
+    void rebuild_bind_group(const VividGpuContext* ctx) {
         vivid::gpu::release(bind_group_);
 
         WGPUTextureView shadow_view = dir_shadow_sample_ ? dir_shadow_sample_ : fallback_shadow_view_;
@@ -1969,7 +1966,7 @@ private:
         bg_desc.layout = bind_layout_;
         bg_desc.entryCount = 6;
         bg_desc.entries = bg_entries;
-        bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
+        bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &bg_desc);
     }
 
     // Phase 6d: Compute directional light VP (ortho projection fitting scene geometry)
@@ -2056,10 +2053,10 @@ private:
     }
 
     // Phase 6d: Run shadow render pass (depth + scratch color attachment)
-    void render_shadow_pass(VividGpuState* gpu, const std::vector<DrawCall>& draws,
+    void render_shadow_pass(const VividGpuContext* ctx, const std::vector<DrawCall>& draws,
                             WGPUTextureView depth_target, uint32_t w, uint32_t h,
                             const char* label) {
-        auto shadow_pipeline = get_or_create_pipeline(gpu, vivid::gpu::kPipelineShadowCaster);
+        auto shadow_pipeline = get_or_create_pipeline(ctx, vivid::gpu::kPipelineShadowCaster);
         if (!shadow_pipeline) return;
 
         WGPURenderPassDepthStencilAttachment depth_att{};
@@ -2083,7 +2080,7 @@ private:
         rp_desc.depthStencilAttachment = &depth_att;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
-            gpu->command_encoder, &rp_desc);
+            ctx->command_encoder, &rp_desc);
 
         wgpuRenderPassEncoderSetPipeline(pass, shadow_pipeline);
 
@@ -2113,7 +2110,7 @@ private:
     }
 
     // Phase 6f: skybox shader + pipeline initialization
-    bool init_skybox(VividGpuState* gpu) {
+    bool init_skybox(const VividGpuContext* ctx) {
         static const char* kSkyboxShader = R"(
 struct SkyboxCamera {
     inverse_vp: mat4x4f,
@@ -2154,7 +2151,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
 }
 )";
         skybox_shader_ = vivid::gpu::create_wgsl_shader(
-            gpu->device, kSkyboxShader, "Render3D Skybox Shader");
+            ctx->device, kSkyboxShader, "Render3D Skybox Shader");
         if (!skybox_shader_) return false;
 
         // Bind group layout: camera UBO + sampler + cubemap
@@ -2177,23 +2174,23 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         bgl_desc.label = vivid_sv("Render3D Skybox BGL");
         bgl_desc.entryCount = 3;
         bgl_desc.entries = entries;
-        skybox_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+        skybox_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
 
         WGPUPipelineLayoutDescriptor pl_desc{};
         pl_desc.label = vivid_sv("Render3D Skybox PL");
         pl_desc.bindGroupLayoutCount = 1;
         pl_desc.bindGroupLayouts = &skybox_bgl_;
-        skybox_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl_desc);
+        skybox_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl_desc);
 
         // Camera UBO (64 bytes — inverse VP matrix)
         skybox_camera_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, 64, "Render3D Skybox Camera UBO");
+            ctx->device, 64, "Render3D Skybox Camera UBO");
 
         // Pipeline: depth test LessEqual, no depth write, no blend
         vivid::gpu::Pipeline3DDesc pd{};
         pd.shader       = skybox_shader_;
         pd.layout       = skybox_pipe_layout_;
-        pd.color_format = gpu->output_format;
+        pd.color_format = ctx->output_format;
         pd.vertex_layouts      = nullptr;
         pd.vertex_layout_count = 0;
         pd.cull_mode    = WGPUCullMode_None;
@@ -2202,18 +2199,18 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         pd.vs_entry     = "vs_skybox";
         pd.fs_entry     = "fs_skybox";
         pd.label        = "Render3D Skybox Pipeline";
-        skybox_pipeline_ = vivid::gpu::create_3d_pipeline(gpu->device, pd);
+        skybox_pipeline_ = vivid::gpu::create_3d_pipeline(ctx->device, pd);
         return skybox_pipeline_ != nullptr;
     }
 
     // Phase 6f: render skybox pass
-    void render_skybox(VividGpuState* gpu,
+    void render_skybox(const VividGpuContext* ctx,
                        const vivid::gpu::VividSceneFragment* env,
                        const mat4x4 vp, const float* eye) {
         // Write inverse VP to skybox camera UBO
         mat4x4 inv_vp;
         mat4x4_invert(inv_vp, vp);
-        wgpuQueueWriteBuffer(gpu->queue, skybox_camera_ubo_, 0, inv_vp, 64);
+        wgpuQueueWriteBuffer(ctx->queue, skybox_camera_ubo_, 0, inv_vp, 64);
 
         // Rebuild skybox bind group (environment cubemap may change)
         vivid::gpu::release(skybox_bg_);
@@ -2232,11 +2229,11 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         bg_desc.layout = skybox_bgl_;
         bg_desc.entryCount = 3;
         bg_desc.entries = entries;
-        skybox_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
+        skybox_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &bg_desc);
 
         // Begin pass — load existing color + depth (no clear)
         WGPURenderPassColorAttachment color_att{};
-        color_att.view = gpu->output_texture_view;
+        color_att.view = ctx->output_texture_view;
         color_att.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
         color_att.loadOp = WGPULoadOp_Load;
         color_att.storeOp = WGPUStoreOp_Store;
@@ -2253,7 +2250,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         rp_desc.depthStencilAttachment = &depth_att;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
-            gpu->command_encoder, &rp_desc);
+            ctx->command_encoder, &rp_desc);
         wgpuRenderPassEncoderSetPipeline(pass, skybox_pipeline_);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, skybox_bg_, 0, nullptr);
         wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
@@ -2261,7 +2258,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         wgpuRenderPassEncoderRelease(pass);
     }
 
-    WGPURenderPipeline get_or_create_pipeline(VividGpuState* gpu, uint32_t flags) {
+    WGPURenderPipeline get_or_create_pipeline(const VividGpuContext* ctx, uint32_t flags) {
         auto it = pipeline_cache_.find(flags);
         if (it != pipeline_cache_.end()) return it->second;
 
@@ -2311,7 +2308,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             rp_desc.multisample.mask = 0xFFFFFFFF;
             rp_desc.fragment = &shadow_frag;
 
-            auto pipeline = wgpuDeviceCreateRenderPipeline(gpu->device, &rp_desc);
+            auto pipeline = wgpuDeviceCreateRenderPipeline(ctx->device, &rp_desc);
             if (pipeline) pipeline_cache_[flags] = pipeline;
             return pipeline;
         }
@@ -2389,27 +2386,27 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             pd.label = "Render3D Pipeline";
         }
 
-        auto pipeline = vivid::gpu::create_3d_pipeline(gpu->device, pd);
+        auto pipeline = vivid::gpu::create_3d_pipeline(ctx->device, pd);
         if (pipeline) pipeline_cache_[flags] = pipeline;
         return pipeline;
     }
 
-    bool lazy_init(VividGpuState* gpu) {
-        cached_device_ = gpu->device;
+    bool lazy_init(const VividGpuContext* ctx) {
+        cached_device_ = ctx->device;
 
         // ---- Compile shader modules ----
         std::string src = std::string(vivid::gpu::VERTEX_3D_WGSL)
                         + std::string(vivid::gpu::LIGHTS_3D_WGSL)
                         + std::string(vivid::gpu::SHADOW_3D_WGSL)
                         + kRender3DFragment;
-        shader_ = vivid::gpu::create_shader(gpu->device, src.c_str(), "Render3D Shader");
+        shader_ = vivid::gpu::create_shader(ctx->device, src.c_str(), "Render3D Shader");
         if (!shader_) return false;
 
         std::string inst_src = std::string(vivid::gpu::VERTEX_3D_WGSL)
                              + std::string(vivid::gpu::LIGHTS_3D_WGSL)
                              + std::string(vivid::gpu::SHADOW_3D_WGSL)
                              + kRender3DInstanced;
-        instanced_shader_ = vivid::gpu::create_shader(gpu->device, inst_src.c_str(),
+        instanced_shader_ = vivid::gpu::create_shader(ctx->device, inst_src.c_str(),
                                                        "Render3D Instanced Shader");
         if (!instanced_shader_) return false;
 
@@ -2417,7 +2414,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
                            + std::string(vivid::gpu::LIGHTS_3D_WGSL)
                            + std::string(vivid::gpu::SHADOW_3D_WGSL)
                            + kRender3DBillboard;
-        billboard_shader_ = vivid::gpu::create_shader(gpu->device, bb_src.c_str(),
+        billboard_shader_ = vivid::gpu::create_shader(ctx->device, bb_src.c_str(),
                                                        "Render3D Billboard Shader");
         if (!billboard_shader_) return false;
 
@@ -2427,24 +2424,24 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
                             + std::string(vivid::gpu::SHADOW_3D_WGSL)
                             + std::string(vivid::gpu::PBR_BRDF_WGSL)
                             + kRender3DTextured;
-        textured_shader_ = vivid::gpu::create_shader(gpu->device, tex_src.c_str(),
+        textured_shader_ = vivid::gpu::create_shader(ctx->device, tex_src.c_str(),
                                                        "Render3D Textured Shader");
         if (!textured_shader_) return false;
 
         // Phase 6d: shadow caster shader (standalone, no preamble needed)
-        shadow_shader_ = vivid::gpu::create_wgsl_shader(gpu->device, kShadowCasterShader,
+        shadow_shader_ = vivid::gpu::create_wgsl_shader(ctx->device, kShadowCasterShader,
                                                           "Render3D Shadow Caster Shader");
         if (!shadow_shader_) return false;
 
         // ---- Uniform buffers ----
         camera_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, kMaxDrawSlots * kCameraSlotStride, "Render3D Camera UBO");
+            ctx->device, kMaxDrawSlots * kCameraSlotStride, "Render3D Camera UBO");
         material_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, kMaxDrawSlots * kMaterialSlotStride, "Render3D Material UBO");
+            ctx->device, kMaxDrawSlots * kMaterialSlotStride, "Render3D Material UBO");
         lights_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(LightsUniform), "Render3D Lights UBO");
+            ctx->device, sizeof(LightsUniform), "Render3D Lights UBO");
         shadow_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(ShadowUniform), "Render3D Shadow UBO");
+            ctx->device, sizeof(ShadowUniform), "Render3D Shadow UBO");
 
         // ---- Phase 6d: comparison sampler for shadow mapping ----
         {
@@ -2457,12 +2454,12 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             sd.minFilter    = WGPUFilterMode_Linear;
             sd.compare      = WGPUCompareFunction_Less;
             sd.maxAnisotropy = 1;
-            shadow_sampler_ = wgpuDeviceCreateSampler(gpu->device, &sd);
+            shadow_sampler_ = wgpuDeviceCreateSampler(ctx->device, &sd);
         }
 
         // ---- Phase 6d: fallback 1x1 depth texture for shadow sampling ----
         fallback_shadow_tex_ = vivid::gpu::create_shadow_map_texture(
-            gpu->device, 1, 1, "Render3D Fallback Shadow Tex");
+            ctx->device, 1, 1, "Render3D Fallback Shadow Tex");
         {
             WGPUTextureViewDescriptor vd{};
             vd.label = vivid_sv("Render3D Fallback Shadow View");
@@ -2511,7 +2508,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         bgl_desc.label = vivid_sv("Render3D BGL");
         bgl_desc.entryCount = 6;
         bgl_desc.entries = entries;
-        bind_layout_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &bgl_desc);
+        bind_layout_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl_desc);
 
         // ---- Bind group layout 1: storage buffer for instancing ----
         WGPUBindGroupLayoutEntry inst_entry{};
@@ -2524,14 +2521,14 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         inst_bgl_desc.label = vivid_sv("Render3D Instance BGL");
         inst_bgl_desc.entryCount = 1;
         inst_bgl_desc.entries = &inst_entry;
-        inst_bind_layout_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &inst_bgl_desc);
+        inst_bind_layout_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &inst_bgl_desc);
 
         // ---- Pipeline layout: non-instanced (group 0 only) ----
         WGPUPipelineLayoutDescriptor pl_desc{};
         pl_desc.label = vivid_sv("Render3D Pipeline Layout");
         pl_desc.bindGroupLayoutCount = 1;
         pl_desc.bindGroupLayouts = &bind_layout_;
-        pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &pl_desc);
+        pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl_desc);
 
         // ---- Pipeline layout: instanced + billboard (group 0 + group 1) ----
         WGPUBindGroupLayout inst_layouts[2] = { bind_layout_, inst_bind_layout_ };
@@ -2539,16 +2536,16 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         inst_pl_desc.label = vivid_sv("Render3D Instanced Pipeline Layout");
         inst_pl_desc.bindGroupLayoutCount = 2;
         inst_pl_desc.bindGroupLayouts = inst_layouts;
-        inst_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &inst_pl_desc);
+        inst_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &inst_pl_desc);
 
         // ---- Phase 6c: textured pipeline layout (group 0 + PBR textures) ----
-        tex_bind_layout_ = vivid::gpu::create_pbr_texture_bind_layout(gpu->device);
+        tex_bind_layout_ = vivid::gpu::create_pbr_texture_bind_layout(ctx->device);
         WGPUBindGroupLayout tex_layouts[2] = { bind_layout_, tex_bind_layout_ };
         WGPUPipelineLayoutDescriptor tex_pl_desc{};
         tex_pl_desc.label = vivid_sv("Render3D Textured Pipeline Layout");
         tex_pl_desc.bindGroupLayoutCount = 2;
         tex_pl_desc.bindGroupLayouts = tex_layouts;
-        tex_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &tex_pl_desc);
+        tex_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &tex_pl_desc);
 
         // ---- Phase 6d: shadow caster pipeline layout (camera-only, 1 entry) ----
         {
@@ -2563,19 +2560,19 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             sc_bgl_desc.label = vivid_sv("Render3D Shadow Camera BGL");
             sc_bgl_desc.entryCount = 1;
             sc_bgl_desc.entries = &sc_entry;
-            shadow_camera_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &sc_bgl_desc);
+            shadow_camera_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &sc_bgl_desc);
 
             WGPUPipelineLayoutDescriptor sc_pl_desc{};
             sc_pl_desc.label = vivid_sv("Render3D Shadow Pipeline Layout");
             sc_pl_desc.bindGroupLayoutCount = 1;
             sc_pl_desc.bindGroupLayouts = &shadow_camera_bgl_;
-            shadow_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &sc_pl_desc);
+            shadow_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &sc_pl_desc);
 
             // Dedicated shadow camera UBO (separate from main camera_ubo_ to avoid
             // queue write ordering issues — all wgpuQueueWriteBuffer calls complete
             // before any command buffer executes)
             shadow_camera_ubo_ = vivid::gpu::create_uniform_buffer(
-                gpu->device, kMaxDrawSlots * kCameraSlotStride, "Render3D Shadow Camera UBO");
+                ctx->device, kMaxDrawSlots * kCameraSlotStride, "Render3D Shadow Camera UBO");
 
             // Shadow caster bind group (uses dedicated shadow_camera_ubo_)
             WGPUBindGroupEntry sc_bg_entry{};
@@ -2589,11 +2586,11 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             sc_bg_desc.layout     = shadow_camera_bgl_;
             sc_bg_desc.entryCount = 1;
             sc_bg_desc.entries    = &sc_bg_entry;
-            shadow_camera_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &sc_bg_desc);
+            shadow_camera_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &sc_bg_desc);
         }
 
         // ---- Phase 6c: PBR sampler + fallback textures ----
-        pbr_sampler_ = vivid::gpu::create_repeat_sampler(gpu->device, "Render3D PBR Sampler");
+        pbr_sampler_ = vivid::gpu::create_repeat_sampler(ctx->device, "Render3D PBR Sampler");
 
         // Fallback 1x1 RGBA8Unorm textures
         struct FallbackSpec { const char* label; uint8_t rgba[4]; };
@@ -2612,7 +2609,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             td.dimension = WGPUTextureDimension_2D;
             td.format = WGPUTextureFormat_RGBA8Unorm;
             td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-            fallback_textures_[i] = wgpuDeviceCreateTexture(gpu->device, &td);
+            fallback_textures_[i] = wgpuDeviceCreateTexture(ctx->device, &td);
 
             WGPUTexelCopyTextureInfo dst{};
             dst.texture = fallback_textures_[i];
@@ -2621,7 +2618,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
             layout_info.bytesPerRow = 4;
             layout_info.rowsPerImage = 1;
             WGPUExtent3D extent = {1, 1, 1};
-            wgpuQueueWriteTexture(gpu->queue, &dst, specs[i].rgba, 4, &layout_info, &extent);
+            wgpuQueueWriteTexture(ctx->queue, &dst, specs[i].rgba, 4, &layout_info, &extent);
 
             WGPUTextureViewDescriptor vd{};
             vd.label = vivid_sv(specs[i].label);
@@ -2645,7 +2642,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         fb_bg_desc.layout = tex_bind_layout_;
         fb_bg_desc.entryCount = 5;
         fb_bg_desc.entries = tex_bg_entries;
-        fallback_tex_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &fb_bg_desc);
+        fallback_tex_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &fb_bg_desc);
 
         // ---- Bind group 0 (6 entries: camera, material, lights, shadow, sampler, depth tex) ----
         WGPUBindGroupEntry bg_entries[6]{};
@@ -2680,17 +2677,17 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
         bg_desc.layout = bind_layout_;
         bg_desc.entryCount = 6;
         bg_desc.entries = bg_entries;
-        bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
+        bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &bg_desc);
 
         // ---- Record output format for pipeline cache ----
-        cached_format_ = gpu->output_format;
+        cached_format_ = ctx->output_format;
 
         // ---- Initial depth buffer (with TextureBinding for depth blit) ----
         depth_tex_ = vivid::gpu::create_shadow_map_texture(
-            gpu->device, gpu->output_width, gpu->output_height, "Render3D Depth");
+            ctx->device, ctx->output_width, ctx->output_height, "Render3D Depth");
         depth_view_ = vivid::gpu::create_depth_view(depth_tex_, "Render3D Depth View");
-        cached_w_ = gpu->output_width;
-        cached_h_ = gpu->output_height;
+        cached_w_ = ctx->output_width;
+        cached_h_ = ctx->output_height;
 
         // ---- Phase 6e: depth blit pipeline (Depth32Float → R32Float) ----
         {
@@ -2730,7 +2727,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
 }
 )";
             depth_blit_shader_ = vivid::gpu::create_wgsl_shader(
-                gpu->device, kDepthBlitShader, "Render3D Depth Blit Shader");
+                ctx->device, kDepthBlitShader, "Render3D Depth Blit Shader");
             if (!depth_blit_shader_) return false;
 
             // Nearest sampler (non-comparison)
@@ -2742,7 +2739,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             sd.magFilter = WGPUFilterMode_Nearest;
             sd.minFilter = WGPUFilterMode_Nearest;
             sd.maxAnisotropy = 1;
-            depth_blit_sampler_ = wgpuDeviceCreateSampler(gpu->device, &sd);
+            depth_blit_sampler_ = wgpuDeviceCreateSampler(ctx->device, &sd);
 
             // Bind group layout: depth_tex(0) + sampler(1)
             WGPUBindGroupLayoutEntry blit_entries[2]{};
@@ -2759,14 +2756,14 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             blit_bgl_desc.label = vivid_sv("Render3D Depth Blit BGL");
             blit_bgl_desc.entryCount = 2;
             blit_bgl_desc.entries = blit_entries;
-            depth_blit_bgl_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &blit_bgl_desc);
+            depth_blit_bgl_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &blit_bgl_desc);
 
             // Pipeline layout
             WGPUPipelineLayoutDescriptor blit_pl_desc{};
             blit_pl_desc.label = vivid_sv("Render3D Depth Blit Pipeline Layout");
             blit_pl_desc.bindGroupLayoutCount = 1;
             blit_pl_desc.bindGroupLayouts = &depth_blit_bgl_;
-            depth_blit_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &blit_pl_desc);
+            depth_blit_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &blit_pl_desc);
 
             // Pipeline: R32Float target, no blend, no depth stencil
             WGPUColorTargetState blit_ct{};
@@ -2792,7 +2789,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             blit_rp.multisample.mask = 0xFFFFFFFF;
             blit_rp.fragment = &blit_frag;
 
-            depth_blit_pipeline_ = wgpuDeviceCreateRenderPipeline(gpu->device, &blit_rp);
+            depth_blit_pipeline_ = wgpuDeviceCreateRenderPipeline(ctx->device, &blit_rp);
             if (!depth_blit_pipeline_) return false;
         }
 
@@ -2800,14 +2797,14 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
         {
             WGPUTextureDescriptor td{};
             td.label = vivid_sv("Render3D Depth Out R32F");
-            td.size = { gpu->output_width, gpu->output_height, 1 };
+            td.size = { ctx->output_width, ctx->output_height, 1 };
             td.mipLevelCount = 1;
             td.sampleCount = 1;
             td.dimension = WGPUTextureDimension_2D;
             td.format = WGPUTextureFormat_R32Float;
             td.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding
                      | WGPUTextureUsage_CopySrc;
-            depth_out_tex_ = wgpuDeviceCreateTexture(gpu->device, &td);
+            depth_out_tex_ = wgpuDeviceCreateTexture(ctx->device, &td);
 
             WGPUTextureViewDescriptor vd{};
             vd.label = vivid_sv("Render3D Depth Out R32F View");
@@ -2851,21 +2848,21 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             ibl_bgl_desc.label = vivid_sv("Render3D IBL BGL");
             ibl_bgl_desc.entryCount = 5;
             ibl_bgl_desc.entries = ibl_entries;
-            ibl_bind_layout_ = wgpuDeviceCreateBindGroupLayout(gpu->device, &ibl_bgl_desc);
+            ibl_bind_layout_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &ibl_bgl_desc);
         }
 
         // ---- Phase 6f: IBL UBO ----
         ibl_ubo_ = vivid::gpu::create_uniform_buffer(
-            gpu->device, sizeof(IBLUniform), "Render3D IBL UBO");
+            ctx->device, sizeof(IBLUniform), "Render3D IBL UBO");
 
         // ---- Phase 6f: IBL sampler (linear, clamp) ----
         ibl_sampler_ = vivid::gpu::create_clamp_linear_sampler(
-            gpu->device, "Render3D IBL Sampler");
+            ctx->device, "Render3D IBL Sampler");
 
         // ---- Phase 6f: fallback IBL cubemap (1x1x6 black RGBA16Float) ----
         {
             fallback_ibl_cube_tex_ = vivid::gpu::create_cubemap_texture(
-                gpu->device, 1, 1, WGPUTextureFormat_RGBA16Float, "Render3D Fallback IBL Cube");
+                ctx->device, 1, 1, WGPUTextureFormat_RGBA16Float, "Render3D Fallback IBL Cube");
             fallback_ibl_cube_view_ = vivid::gpu::create_cubemap_view(
                 fallback_ibl_cube_tex_, WGPUTextureFormat_RGBA16Float, 1,
                 "Render3D Fallback IBL Cube View");
@@ -2881,7 +2878,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
                 bl.bytesPerRow = 8;
                 bl.rowsPerImage = 1;
                 WGPUExtent3D ext = { 1, 1, 1 };
-                wgpuQueueWriteTexture(gpu->queue, &dst, black_rgba16, 8, &bl, &ext);
+                wgpuQueueWriteTexture(ctx->queue, &dst, black_rgba16, 8, &bl, &ext);
             }
         }
 
@@ -2895,7 +2892,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             td.dimension = WGPUTextureDimension_2D;
             td.format = WGPUTextureFormat_RG16Float;
             td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-            fallback_ibl_lut_tex_ = wgpuDeviceCreateTexture(gpu->device, &td);
+            fallback_ibl_lut_tex_ = wgpuDeviceCreateTexture(ctx->device, &td);
 
             WGPUTextureViewDescriptor vd{};
             vd.label = vivid_sv("Render3D Fallback BRDF LUT View");
@@ -2913,14 +2910,14 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             bl.bytesPerRow = 4;
             bl.rowsPerImage = 1;
             WGPUExtent3D ext = { 1, 1, 1 };
-            wgpuQueueWriteTexture(gpu->queue, &dst, zero_rg16, 4, &bl, &ext);
+            wgpuQueueWriteTexture(ctx->queue, &dst, zero_rg16, 4, &bl, &ext);
         }
 
         // ---- Phase 6f: fallback IBL bind group (has_environment=0) ----
         {
             IBLUniform ibl_zero{};
             ibl_zero.has_environment = 0.0f;
-            wgpuQueueWriteBuffer(gpu->queue, ibl_ubo_, 0, &ibl_zero, sizeof(ibl_zero));
+            wgpuQueueWriteBuffer(ctx->queue, ibl_ubo_, 0, &ibl_zero, sizeof(ibl_zero));
 
             WGPUBindGroupEntry entries[5]{};
             entries[0].binding = 0;
@@ -2941,7 +2938,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             bg_desc.layout = ibl_bind_layout_;
             bg_desc.entryCount = 5;
             bg_desc.entries = entries;
-            fallback_ibl_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &bg_desc);
+            fallback_ibl_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &bg_desc);
         }
 
         // ---- Phase 6f: IBL pipeline layouts ----
@@ -2950,7 +2947,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             WGPUBindGroupLayoutDescriptor empty_desc{};
             empty_desc.label = vivid_sv("Render3D Empty BGL (IBL gap)");
             empty_desc.entryCount = 0;
-            WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(gpu->device, &empty_desc);
+            WGPUBindGroupLayout empty_bgl = wgpuDeviceCreateBindGroupLayout(ctx->device, &empty_desc);
 
             // ibl_pipe_layout_: group 0 + empty group 1 + group 2
             WGPUBindGroupLayout ibl_layouts[3] = { bind_layout_, empty_bgl, ibl_bind_layout_ };
@@ -2958,14 +2955,14 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             desc.label = vivid_sv("Render3D IBL Pipeline Layout");
             desc.bindGroupLayoutCount = 3;
             desc.bindGroupLayouts = ibl_layouts;
-            ibl_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &desc);
+            ibl_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &desc);
 
             // Create empty bind group for the placeholder group 1
             WGPUBindGroupDescriptor ebg_desc{};
             ebg_desc.label = vivid_sv("Render3D Empty IBL Gap BG");
             ebg_desc.layout = empty_bgl;
             ebg_desc.entryCount = 0;
-            ibl_empty_bg_ = wgpuDeviceCreateBindGroup(gpu->device, &ebg_desc);
+            ibl_empty_bg_ = wgpuDeviceCreateBindGroup(ctx->device, &ebg_desc);
 
             ibl_empty_bgl_ = empty_bgl;
         }
@@ -2976,7 +2973,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
             desc.label = vivid_sv("Render3D Textured IBL Pipeline Layout");
             desc.bindGroupLayoutCount = 3;
             desc.bindGroupLayouts = tex_ibl_layouts;
-            tex_ibl_pipe_layout_ = wgpuDeviceCreatePipelineLayout(gpu->device, &desc);
+            tex_ibl_pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &desc);
         }
 
         // ---- Phase 6f: IBL shader modules ----
@@ -2986,7 +2983,7 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
                             + std::string(vivid::gpu::SHADOW_3D_WGSL)
                             + std::string(kIBLBindingsWGSL)
                             + kRender3DFragmentIBL;
-            ibl_shader_ = vivid::gpu::create_shader(gpu->device, src.c_str(),
+            ibl_shader_ = vivid::gpu::create_shader(ctx->device, src.c_str(),
                                                       "Render3D IBL Shader");
             if (!ibl_shader_) return false;
         }
@@ -2997,13 +2994,13 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
                             + std::string(vivid::gpu::PBR_BRDF_WGSL)
                             + std::string(kIBLBindingsWGSL)
                             + kRender3DTexturedIBL;
-            textured_ibl_shader_ = vivid::gpu::create_shader(gpu->device, src.c_str(),
+            textured_ibl_shader_ = vivid::gpu::create_shader(ctx->device, src.c_str(),
                                                                "Render3D Textured IBL Shader");
             if (!textured_ibl_shader_) return false;
         }
 
         // ---- Phase 6f: skybox ----
-        if (!init_skybox(gpu)) return false;
+        if (!init_skybox(ctx)) return false;
 
         return true;
     }

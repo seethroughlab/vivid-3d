@@ -6,9 +6,8 @@
 // SceneMerge — N scene inputs → 1 combined scene output
 // =============================================================================
 
-struct SceneMerge : vivid::OperatorBase {
+struct SceneMerge : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "SceneMerge";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     void collect_params(std::vector<vivid::ParamBase*>&) override {}
@@ -21,14 +20,11 @@ struct SceneMerge : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene",   VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Collect non-null scene inputs
         child_count_ = 0;
-        for (uint32_t i = 0; i < gpu->input_data_count && child_count_ < 4; ++i) {
-            auto* s = vivid::gpu::scene_input(gpu, i);
+        for (uint32_t i = 0; i < ctx->input_data_count && child_count_ < 4; ++i) {
+            auto* s = vivid::gpu::scene_input(ctx, i);
             if (s) {
                 children_[child_count_++] = s;
             }
@@ -48,7 +44,7 @@ struct SceneMerge : vivid::OperatorBase {
         output_.children        = children_;
         output_.child_count     = child_count_;
 
-        gpu->output_data = &output_;
+        ctx->output_data[0] = &output_;
     }
 
 private:

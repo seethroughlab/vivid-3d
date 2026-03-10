@@ -7,9 +7,8 @@
 // Material3D — PBR material wrapper (scene-in + 4 texture inputs → scene-out)
 // =============================================================================
 
-struct Material3D : vivid::OperatorBase {
+struct Material3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Material3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> color_r    {"color_r",    1.0f, 0.0f, 1.0f};
@@ -59,26 +58,23 @@ struct Material3D : vivid::OperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         // Need scene input
-        bool has_input = gpu->input_data_count > 0 &&
-                         vivid::gpu::scene_input(gpu, 0) != nullptr;
+        bool has_input = ctx->input_data_count > 0 &&
+                         vivid::gpu::scene_input(ctx, 0) != nullptr;
         if (!has_input) return;
 
         if (!inited_) {
-            if (!lazy_init(gpu)) return;
+            if (!lazy_init(ctx)) return;
         }
 
         // Resolve 4 texture input views (fallback if disconnected)
         WGPUTextureView views[4];
         for (int i = 0; i < 4; ++i) {
             uint32_t tex_idx = static_cast<uint32_t>(i);
-            if (tex_idx < gpu->input_texture_count &&
-                gpu->input_texture_views && gpu->input_texture_views[tex_idx]) {
-                views[i] = gpu->input_texture_views[tex_idx];
+            if (tex_idx < ctx->input_texture_count &&
+                ctx->input_texture_views && ctx->input_texture_views[tex_idx]) {
+                views[i] = ctx->input_texture_views[tex_idx];
             } else {
                 views[i] = fallback_views_[i];
             }
@@ -106,7 +102,7 @@ struct Material3D : vivid::OperatorBase {
             desc.layout = tex_bind_layout_;
             desc.entryCount = 5;
             desc.entries = entries;
-            tex_bind_group_ = wgpuDeviceCreateBindGroup(gpu->device, &desc);
+            tex_bind_group_ = wgpuDeviceCreateBindGroup(ctx->device, &desc);
         }
 
         // Build output fragment with material properties
@@ -133,11 +129,11 @@ struct Material3D : vivid::OperatorBase {
         output_.material_binds  = nullptr;
         output_.fragment_type   = vivid::gpu::VividSceneFragment::GEOMETRY;
 
-        child_ = vivid::gpu::scene_input(gpu, 0);
+        child_ = vivid::gpu::scene_input(ctx, 0);
         output_.children    = &child_;
         output_.child_count = 1;
 
-        gpu->output_data = &output_;
+        ctx->output_data[0] = &output_;
     }
 
     ~Material3D() override {
@@ -163,7 +159,7 @@ private:
     vivid::gpu::VividSceneFragment  output_{};
     vivid::gpu::VividSceneFragment* child_ = nullptr;
 
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* gpu) {
         tex_bind_layout_ = vivid::gpu::create_pbr_texture_bind_layout(gpu->device);
         if (!tex_bind_layout_) return false;
 

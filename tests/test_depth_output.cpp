@@ -190,7 +190,7 @@ static void tick_and_submit(vivid::Scheduler& sched, HeadlessGpu& gpu,
     enc_desc.label = vivid::to_sv("Tick Encoder");
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu.device, &enc_desc);
 
-    VividGpuState gpu_state{};
+    VividGpuContext gpu_state{};
     gpu_state.device          = gpu.device;
     gpu_state.queue           = gpu.queue;
     gpu_state.command_encoder = encoder;
@@ -229,12 +229,12 @@ int main() {
     // CPU tests
     // =====================================================================
 
-    std::fprintf(stderr, "\n=== CPU Test: depth_output_port_idx detection ===\n");
+    std::fprintf(stderr, "\n=== CPU Test: aux texture output detection ===\n");
     {
-        // Verify that init_node_state sets depth_output_port_idx = -1 when
-        // no "depth" output port exists.
+        // Verify that init_node_state populates aux_texture_output_port_indices
+        // when multiple GPU_TEXTURE outputs exist.
         // (The actual port detection is tested by the GPU test below)
-        check(true, "CPU depth port detection placeholder");
+        check(true, "CPU aux texture output detection placeholder");
     }
 
     // =====================================================================
@@ -301,30 +301,31 @@ int main() {
         check(sched.build(g, registry), "depth scene build succeeds");
         sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
 
-        // Verify depth_output_port_idx is set correctly
+        // Verify aux texture output is detected (Render3D has a 2nd GPU_TEXTURE "depth" port)
         auto* render_node = sched.find_node_mut("r1");
         check(render_node != nullptr, "Render3D node found");
         if (render_node) {
-            check(render_node->depth_output_port_idx >= 0,
-                  "depth_output_port_idx is set (not -1)");
-            std::fprintf(stderr, "  depth_output_port_idx = %d\n",
-                         render_node->depth_output_port_idx);
+            check(!render_node->aux_texture_output_port_indices.empty(),
+                  "Render3D has aux texture output (depth port)");
+            if (!render_node->aux_texture_output_port_indices.empty()) {
+                std::fprintf(stderr, "  aux_texture_output_port_indices[0] = %d\n",
+                             render_node->aux_texture_output_port_indices[0]);
+            }
         }
 
         // Tick to produce depth output
         tick_and_submit(sched, gpu, kFormat);
 
-        // Verify depth texture view was set
+        // Verify aux texture view was allocated after tick
         if (render_node) {
-            check(render_node->gpu_depth_texture_view != nullptr,
-                  "gpu_depth_texture_view is set after tick");
+            check(!render_node->aux_gpu_texture_views.empty() &&
+                  render_node->aux_gpu_texture_views[0] != nullptr,
+                  "aux depth texture view is set after tick");
         }
 
-        // Find the Render3D node's depth texture for readback
-        // The depth texture is stored as gpu_depth_texture on the node
-        // But we need the raw R32Float texture for readback, which is internal
-        // to the operator. We verify via the view being non-null and check
-        // by rendering and reading back the color buffer to see cube is visible.
+        // The depth texture is now stored as aux_gpu_textures[0] on the node.
+        // We verify the view is non-null above, and check the color buffer
+        // readback to confirm the cube is visible.
 
         // Read back RGBA to verify cube is visible
         if (render_node && render_node->gpu_texture) {
@@ -391,9 +392,9 @@ int main() {
     }
 
     // -----------------------------------------------------------------
-    // GPU Test: depth_output_port_idx = -1 for Shape3D (no depth port)
+    // GPU Test: Shape3D has no aux texture outputs, Render3D does
     // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: No depth port on Shape3D ===\n");
+    std::fprintf(stderr, "\n=== GPU Test: No aux texture port on Shape3D ===\n");
     {
         vivid::Graph g;
         g.add_node("s1", "Shape3D");
@@ -406,14 +407,14 @@ int main() {
         auto* shape_node = sched.find_node_mut("s1");
         check(shape_node != nullptr, "Shape3D node found");
         if (shape_node) {
-            check(shape_node->depth_output_port_idx == -1,
-                  "Shape3D has depth_output_port_idx == -1");
+            check(shape_node->aux_texture_output_port_indices.empty(),
+                  "Shape3D has no aux texture outputs");
         }
 
         auto* render_node = sched.find_node_mut("r1");
         if (render_node) {
-            check(render_node->depth_output_port_idx >= 0,
-                  "Render3D has depth_output_port_idx >= 0");
+            check(!render_node->aux_texture_output_port_indices.empty(),
+                  "Render3D has aux texture output (depth)");
         }
 
         sched.shutdown();

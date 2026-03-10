@@ -223,9 +223,8 @@ struct DoFUniforms {
 // DepthOfField3D Operator
 // =============================================================================
 
-struct DepthOfField3D : vivid::OperatorBase {
+struct DepthOfField3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "DepthOfField3D";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> focus_distance {"focus_distance", 5.0f,  0.1f, 100.0f};
@@ -248,12 +247,9 @@ struct DepthOfField3D : vivid::OperatorBase {
         out.push_back({"texture", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (!coc_pipeline_) {
-            if (!lazy_init(gpu)) {
+            if (!lazy_init(ctx)) {
                 std::fprintf(stderr, "[dof3d] lazy_init FAILED\n");
                 return;
             }
@@ -262,18 +258,18 @@ struct DepthOfField3D : vivid::OperatorBase {
         // Get inputs
         WGPUTextureView color_input = nullptr;
         WGPUTextureView depth_input = nullptr;
-        if (gpu->input_texture_views && gpu->input_texture_count >= 1)
-            color_input = gpu->input_texture_views[0];
-        if (gpu->input_texture_views && gpu->input_texture_count >= 2)
-            depth_input = gpu->input_texture_views[1];
+        if (ctx->input_texture_views && ctx->input_texture_count >= 1)
+            color_input = ctx->input_texture_views[0];
+        if (ctx->input_texture_views && ctx->input_texture_count >= 2)
+            depth_input = ctx->input_texture_views[1];
 
         if (!color_input || !depth_input) return;
 
         // Resize intermediates
-        if (gpu->output_width != cached_w_ || gpu->output_height != cached_h_) {
-            recreate_intermediates(gpu);
-            cached_w_ = gpu->output_width;
-            cached_h_ = gpu->output_height;
+        if (ctx->output_width != cached_w_ || ctx->output_height != cached_h_) {
+            recreate_intermediates(ctx);
+            cached_w_ = ctx->output_width;
+            cached_h_ = ctx->output_height;
         }
 
         // Update uniforms
@@ -283,13 +279,13 @@ struct DepthOfField3D : vivid::OperatorBase {
         u.max_blur       = max_blur.value;
         u.near_plane     = near_plane.value;
         u.far_plane      = far_plane.value;
-        u.texel_w        = 1.0f / static_cast<float>(gpu->output_width);
-        u.texel_h        = 1.0f / static_cast<float>(gpu->output_height);
-        wgpuQueueWriteBuffer(gpu->queue, uniform_buf_, 0, &u, sizeof(u));
+        u.texel_w        = 1.0f / static_cast<float>(ctx->output_width);
+        u.texel_h        = 1.0f / static_cast<float>(ctx->output_height);
+        wgpuQueueWriteBuffer(ctx->queue, uniform_buf_, 0, &u, sizeof(u));
 
         // Rebuild bind groups if inputs changed
         if (color_input != cached_color_ || depth_input != cached_depth_ || bg_dirty_) {
-            rebuild_bind_groups(gpu, color_input, depth_input);
+            rebuild_bind_groups(ctx, color_input, depth_input);
             cached_color_ = color_input;
             cached_depth_ = depth_input;
             bg_dirty_ = false;
@@ -298,16 +294,16 @@ struct DepthOfField3D : vivid::OperatorBase {
         static constexpr WGPUColor kClear{0, 0, 0, 0};
 
         // Pass 1: CoC → coc_view_ (R16Float)
-        vivid::gpu::run_pass(gpu->command_encoder, coc_pipeline_, coc_bg_,
+        vivid::gpu::run_pass(ctx->command_encoder, coc_pipeline_, coc_bg_,
                              coc_view_, "DoF CoC", kClear);
 
         // Pass 2: Horizontal blur → blur_h_view_
-        vivid::gpu::run_pass(gpu->command_encoder, blur_h_pipeline_, blur_h_bg_,
+        vivid::gpu::run_pass(ctx->command_encoder, blur_h_pipeline_, blur_h_bg_,
                              blur_h_view_, "DoF Blur H", kClear);
 
         // Pass 3: Vertical blur → output
-        vivid::gpu::run_pass(gpu->command_encoder, blur_v_pipeline_, blur_v_bg_,
-                             gpu->output_texture_view, "DoF Blur V", kClear);
+        vivid::gpu::run_pass(ctx->command_encoder, blur_v_pipeline_, blur_v_bg_,
+                             ctx->output_texture_view, "DoF Blur V", kClear);
     }
 
     ~DepthOfField3D() override {
@@ -364,7 +360,7 @@ private:
     uint32_t cached_h_ = 0;
     bool bg_dirty_ = true;
 
-    void recreate_intermediates(VividGpuState* gpu) {
+    void recreate_intermediates(const VividGpuContext* gpu) {
         vivid::gpu::release(coc_tex_);
         vivid::gpu::release(coc_view_);
         vivid::gpu::release(blur_h_tex_);
@@ -413,7 +409,7 @@ private:
         bg_dirty_ = true;
     }
 
-    void rebuild_bind_groups(VividGpuState* gpu, WGPUTextureView color_input,
+    void rebuild_bind_groups(const VividGpuContext* gpu, WGPUTextureView color_input,
                               WGPUTextureView depth_input) {
         vivid::gpu::release(coc_bg_);
         vivid::gpu::release(blur_h_bg_);
@@ -479,7 +475,7 @@ private:
         }
     }
 
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* gpu) {
         coc_shader_    = vivid::gpu::create_shader(gpu->device, kDoFCoCFragment, "DoF CoC Shader");
         blur_h_shader_ = vivid::gpu::create_shader(gpu->device, kDoFBlurHFragment, "DoF Blur H Shader");
         blur_v_shader_ = vivid::gpu::create_shader(gpu->device, kDoFBlurVFragment, "DoF Blur V Shader");
