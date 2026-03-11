@@ -1,54 +1,94 @@
 {
+    "schema_version": 1,
+    "vivid_version": "0.1.0",
     "nodes": {
         "mesh": {
             "type": "MeshImport",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "rot_x": -4.847577095031738,
+                "pos_x": 0.0,
+                "a": 0.8599853515625,
+                "rot_x": -5.03045654296875,
                 "file": "../assets/DamagedHelmet.glb"
             },
             "layout": {
-                "x": 144.84765625,
-                "y": 201.98828125
+                "x": 30.0,
+                "y": 163.5
             }
         },
         "light": {
             "type": "Light3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "intensity": 1.5,
-                "type": 0.0
+                "type": 0.0,
+                "intensity": 5.677626132965088
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 340.5
             }
         },
         "hdri": {
             "type": "TextureLoader",
             "params": {
                 "file": "../assets/env.png"
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 517.5
             }
         },
         "env": {
             "type": "Environment3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "intensity": 0.800000011920929
+                "rotation_y": -38.5009765625,
+                "intensity": 2.4008517265319824
             },
             "layout": {
-                "x": 235.3359375,
-                "y": 625.94921875
+                "x": 230.0,
+                "y": 427.0
             }
         },
         "merge": {
             "type": "SceneMerge",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "layout": {
                 "x": 430.0,
                 "y": 441.5
             }
         },
-        "render": {
-            "type": "Render3D",
-            "params": {
-                "cam_z": 4.0,
-                "cam_y": 1.0
+        "orbit": {
+            "type": "OrbitCamera",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
             },
             "layout": {
-                "x": 630.0,
+                "x": 550.77734375,
+                "y": 675.94921875
+            }
+        },
+        "render": {
+            "type": "Render3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "layout": {
+                "x": 830.0,
                 "y": 459.62109375
             },
             "resolution": [
@@ -57,7 +97,11 @@
             ]
         },
         "vout": {
-            "type": "video_out"
+            "type": "video_out",
+            "layout": {
+                "x": 1140.07470703125,
+                "y": 472.5472717285156
+            }
         }
     },
     "connections": [
@@ -82,13 +126,25 @@
             "to": "render/scene"
         },
         {
+            "from": "orbit/cam_x",
+            "to": "render/cam_x"
+        },
+        {
+            "from": "orbit/cam_y",
+            "to": "render/cam_y"
+        },
+        {
+            "from": "orbit/cam_z",
+            "to": "render/cam_z"
+        },
+        {
             "from": "render/texture",
             "to": "vout/input"
         }
     ],
     "viewport": {
-        "pan_x": 0.0,
-        "pan_y": 0.0,
-        "zoom": 1.0
+        "pan_x": 236.14312744140625,
+        "pan_y": -8.52415657043457,
+        "zoom": 1.0328534841537476
     }
 }
