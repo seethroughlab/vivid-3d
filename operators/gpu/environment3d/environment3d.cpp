@@ -754,13 +754,9 @@ private:
         return wgpuDeviceCreateRenderPipeline(device, &rp);
     }
 
-    void encode_and_submit_pass(const VividGpuContext* gpu, WGPURenderPipeline pipeline,
-                                WGPUBindGroup bg, WGPUTextureView target,
-                                uint32_t size, const char* label) {
-        WGPUCommandEncoderDescriptor enc_desc{};
-        enc_desc.label = vivid_sv(label);
-        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(gpu->device, &enc_desc);
-
+    void encode_pass(WGPUCommandEncoder encoder, WGPURenderPipeline pipeline,
+                     WGPUBindGroup bg, WGPUTextureView target,
+                     uint32_t size, const char* label) {
         WGPURenderPassColorAttachment ca{};
         ca.view = target;
         ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -781,12 +777,6 @@ private:
         wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
-
-        WGPUCommandBufferDescriptor cmd_desc{};
-        WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
-        wgpuQueueSubmit(gpu->queue, 1, &cmd);
-        wgpuCommandBufferRelease(cmd);
-        wgpuCommandEncoderRelease(encoder);
     }
 
     void precompute_ibl(const VividGpuContext* gpu, WGPUTextureView input_view, float rotation_deg) {
@@ -818,8 +808,8 @@ private:
             WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                 unfiltered_cube_tex_, kHdrFormat, face, 0, "Env3D Equirect Face");
 
-            encode_and_submit_pass(gpu, equirect_pipeline_, bg, face_view, kCubeFaceSize,
-                           "Env3D Equirect Pass");
+            encode_pass(gpu->command_encoder, equirect_pipeline_, bg, face_view, kCubeFaceSize,
+                       "Env3D Equirect Pass");
 
             wgpuTextureViewRelease(face_view);
             wgpuBindGroupRelease(bg);
@@ -850,8 +840,8 @@ private:
             WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                 irradiance_cube_tex_, kHdrFormat, face, 0, "Env3D Irradiance Face");
 
-            encode_and_submit_pass(gpu, irradiance_pipeline_, bg, face_view, kIrradianceSize,
-                           "Env3D Irradiance Pass");
+            encode_pass(gpu->command_encoder, irradiance_pipeline_, bg, face_view, kIrradianceSize,
+                       "Env3D Irradiance Pass");
 
             wgpuTextureViewRelease(face_view);
             wgpuBindGroupRelease(bg);
@@ -889,8 +879,8 @@ private:
                 WGPUTextureView face_view = vivid::gpu::create_cubemap_face_view(
                     prefiltered_cube_tex_, kHdrFormat, face, mip, "Env3D Prefilter Face");
 
-                encode_and_submit_pass(gpu, prefilter_pipeline_, bg, face_view, face_size,
-                               "Env3D Prefilter Pass");
+                encode_pass(gpu->command_encoder, prefilter_pipeline_, bg, face_view, face_size,
+                           "Env3D Prefilter Pass");
 
                 wgpuTextureViewRelease(face_view);
                 wgpuBindGroupRelease(bg);
