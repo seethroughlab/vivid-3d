@@ -2,7 +2,6 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/gpu_3d.h"
-#include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <string>
@@ -1240,10 +1239,7 @@ struct Render3D : vivid::GpuOperatorBase {
 
     void process_gpu(const VividGpuContext* ctx) override {
         if (cached_format_ == WGPUTextureFormat_Undefined) {
-            if (!lazy_init(ctx)) {
-                std::fprintf(stderr, "[render_3d] lazy_init FAILED\n");
-                return;
-            }
+            if (!lazy_init(ctx)) return;
         }
 
         // Invalidate pipeline cache if output format changed
@@ -1630,7 +1626,8 @@ struct Render3D : vivid::GpuOperatorBase {
     }
 
     ~Render3D() override {
-        for (auto& [f, p] : pipeline_cache_) vivid::gpu::release(p);
+        for (auto& [f, p] : pipeline_cache_)
+            vivid::gpu::release(p);
         vivid::gpu::release(bind_group_);
         vivid::gpu::release(inst_bind_group_);
         vivid::gpu::release(bind_layout_);
@@ -1676,6 +1673,8 @@ struct Render3D : vivid::GpuOperatorBase {
         vivid::gpu::release(shadow_ubo_);
         vivid::gpu::release(fallback_shadow_tex_);
         vivid::gpu::release(fallback_shadow_view_);
+        vivid::gpu::release(shadow_color_view_);
+        vivid::gpu::release(shadow_color_tex_);
         // Phase 6f: IBL resources
         vivid::gpu::release(ibl_shader_);
         vivid::gpu::release(textured_ibl_shader_);
@@ -2150,7 +2149,7 @@ fn fs_skybox(in: SkyboxOutput) -> @location(0) vec4f {
     return vec4f(color, 1.0);
 }
 )";
-        skybox_shader_ = vivid::gpu::create_wgsl_shader(
+skybox_shader_ = vivid::gpu::create_wgsl_shader(
             ctx->device, kSkyboxShader, "Render3D Skybox Shader");
         if (!skybox_shader_) return false;
 

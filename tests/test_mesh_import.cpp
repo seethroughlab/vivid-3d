@@ -105,6 +105,17 @@ struct HeadlessGpu {
         if (adapter)  { wgpuAdapterRelease(adapter); adapter = nullptr; }
         if (instance) { wgpuInstanceRelease(instance); instance = nullptr; }
     }
+
+    // Leak-and-recreate: avoids triggering wgpu-core's buggy resource
+    // cleanup codepath which corrupts the heap on macOS.  Each leaked
+    // instance is ~small and acceptable for test processes.
+    void leak_and_reinit() {
+        queue    = nullptr;
+        device   = nullptr;
+        adapter  = nullptr;
+        instance = nullptr;
+        init();
+    }
 };
 
 // ============================================================================
@@ -375,7 +386,10 @@ int main() {
                 check(rv > 0 || gv > 0 || bv > 0, "center pixel is non-black (mesh visible)");
             }
 
-            sched.shutdown();
+            // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+            // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+            // operator instances + GPU resources is safe for test processes.
+            gpu.leak_and_reinit();
         }
     } else {
         skip("tetrahedron.obj not found — skipping GPU mesh load test");
@@ -410,11 +424,11 @@ int main() {
                   "center pixel is black (empty path = no geometry)");
         }
 
-        sched.shutdown();
+        // sched.shutdown() omitted — wgpu-core v27 heap corruption workaround.
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",

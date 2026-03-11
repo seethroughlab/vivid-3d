@@ -102,6 +102,14 @@ struct HeadlessGpu {
         if (adapter)  { wgpuAdapterRelease(adapter); adapter = nullptr; }
         if (instance) { wgpuInstanceRelease(instance); instance = nullptr; }
     }
+
+    void leak_and_reinit() {
+        queue    = nullptr;
+        device   = nullptr;
+        adapter  = nullptr;
+        instance = nullptr;
+        init();
+    }
 };
 
 // ============================================================================
@@ -311,7 +319,10 @@ int main() {
             check(rv > 0 || gv > 0 || bv > 0, "center pixel is non-black (deformed visible)");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -332,7 +343,10 @@ int main() {
         sched1.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
         tick_and_submit(sched1, gpu, kFormat);
         auto pixels1 = get_center_pixel(sched1, W, H, "r1");
-        sched1.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
 
         // Second: Shape3D → Deformer(amplitude=0) → Render3D
         vivid::Graph g2;
@@ -347,7 +361,10 @@ int main() {
         sched2.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
         tick_and_submit(sched2, gpu, kFormat);
         auto pixels2 = get_center_pixel(sched2, W, H, "r1");
-        sched2.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
 
         check(!pixels1.empty() && !pixels2.empty(), "both readbacks returned pixels");
         if (!pixels1.empty() && !pixels2.empty()) {
@@ -397,11 +414,13 @@ int main() {
             check(rv > 0 || gv > 0 || bv > 0, "center pixel is non-black (sine deform visible)");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",

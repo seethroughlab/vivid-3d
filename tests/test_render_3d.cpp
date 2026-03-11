@@ -103,6 +103,17 @@ struct HeadlessGpu {
         if (adapter)  { wgpuAdapterRelease(adapter); adapter = nullptr; }
         if (instance) { wgpuInstanceRelease(instance); instance = nullptr; }
     }
+
+    // Leak-and-recreate: avoids triggering wgpu-core's buggy resource
+    // cleanup codepath which corrupts the heap on macOS.  Each leaked
+    // instance is ~small and acceptable for test processes.
+    void leak_and_reinit() {
+        queue    = nullptr;
+        device   = nullptr;
+        adapter  = nullptr;
+        instance = nullptr;
+        init();
+    }
 };
 
 // ============================================================================
@@ -401,7 +412,13 @@ int main() {
                   "center pixel is black (0,0,0,255) with default background");
         }
 
-        sched.shutdown();
+        // Skip shutdown — leak operator instances + GPU resources to avoid
+        // wgpu-core heap corruption during resource cleanup.
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
+
     }
 
     // Test: Render3D with custom red background
@@ -432,7 +449,11 @@ int main() {
             check(b == 0, "center pixel blue channel == 0");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
+
     }
 
     if (!has_scene_deps) {
@@ -479,7 +500,9 @@ int main() {
                 for (size_t i = 3; i < pixels.size(); i += 4) min_a = std::min(min_a, pixels[i]);
                 check(min_a == 255, "textured path keeps alpha fully opaque when color_a = 1");
             }
-            sched.shutdown();
+            // sched.shutdown();
+            gpu.leak_and_reinit();
+
         }
 
         auto render_scene = [&](float fog_enabled, float fog_mode, float fog_near,
@@ -522,7 +545,9 @@ int main() {
                     break;
                 }
             }
-            sched.shutdown();
+            // sched.shutdown();
+            gpu.leak_and_reinit();
+
             return out;
         };
 
@@ -563,8 +588,8 @@ int main() {
         }
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",

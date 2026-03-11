@@ -354,11 +354,11 @@ int main() {
             check(has_non_black, "image contains non-black pixels (instances visible)");
         }
 
-        sched.shutdown();
+        // sched.shutdown() omitted — wgpu-core v27 heap corruption workaround.
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",

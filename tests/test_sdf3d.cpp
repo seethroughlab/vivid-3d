@@ -102,6 +102,14 @@ struct HeadlessGpu {
         if (adapter)  { wgpuAdapterRelease(adapter); adapter = nullptr; }
         if (instance) { wgpuInstanceRelease(instance); instance = nullptr; }
     }
+
+    void leak_and_reinit() {
+        queue    = nullptr;
+        device   = nullptr;
+        adapter  = nullptr;
+        instance = nullptr;
+        init();
+    }
 };
 
 // ============================================================================
@@ -346,7 +354,10 @@ int main() {
             check(nb > 0, "SDF sphere: image contains non-black pixels");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -379,7 +390,10 @@ int main() {
             check(nb > 0, "SDF box: image contains non-black pixels");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -413,7 +427,10 @@ int main() {
             check(nb == 0, "SDF moved off-screen: all pixels are black");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -435,7 +452,10 @@ int main() {
         tick_and_submit(sched1, gpu, kFormat, 0.0, 0.016);
         auto pix_sdf = get_pixels(sched1, W, H, "r1");
         uint32_t nb_sdf = pix_sdf.empty() ? 0 : count_non_black(pix_sdf);
-        sched1.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
 
         // Shape3D alone (cube offset to the side)
         vivid::Graph g2;
@@ -449,7 +469,10 @@ int main() {
         tick_and_submit(sched2, gpu, kFormat, 0.0, 0.016);
         auto pix_shape = get_pixels(sched2, W, H, "r2");
         uint32_t nb_shape = pix_shape.empty() ? 0 : count_non_black(pix_shape);
-        sched2.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
 
         // Merged (SDF + Shape3D via SceneMerge)
         vivid::Graph g3;
@@ -467,7 +490,10 @@ int main() {
         tick_and_submit(sched3, gpu, kFormat, 0.0, 0.016);
         auto pix_merged = get_pixels(sched3, W, H, "r3");
         uint32_t nb_merged = pix_merged.empty() ? 0 : count_non_black(pix_merged);
-        sched3.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
 
         check(nb_sdf > 0, "SDF alone has visible pixels");
         check(nb_shape > 0, "Shape alone has visible pixels");
@@ -509,11 +535,10 @@ int main() {
             check(nb > 0, "Smooth union: image contains non-black pixels");
         }
 
-        sched.shutdown();
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",

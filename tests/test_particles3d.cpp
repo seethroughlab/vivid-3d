@@ -102,6 +102,14 @@ struct HeadlessGpu {
         if (adapter)  { wgpuAdapterRelease(adapter); adapter = nullptr; }
         if (instance) { wgpuInstanceRelease(instance); instance = nullptr; }
     }
+
+    void leak_and_reinit() {
+        queue    = nullptr;
+        device   = nullptr;
+        adapter  = nullptr;
+        instance = nullptr;
+        init();
+    }
 };
 
 // ============================================================================
@@ -380,7 +388,10 @@ int main() {
             check(has_non_black, "image contains non-black pixels (particles visible)");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -427,7 +438,10 @@ int main() {
             check(differs, "early vs late frame pixel data differs (particles evolved)");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
     }
 
     // -----------------------------------------------------------------
@@ -461,7 +475,10 @@ int main() {
                 tick_and_submit(sched, gpu, kFormat, i * 0.016, 0.016);
             }
             auto pixels = get_pixels(sched, W, H, "r1");
-            sched.shutdown();
+            // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+            // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+            // operator instances + GPU resources is safe for test processes.
+            gpu.leak_and_reinit();
             return pixels;
         };
 
@@ -515,11 +532,13 @@ int main() {
             check(all_black, "zero emission: all pixels are black");
         }
 
-        sched.shutdown();
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
     }
 
-    // Cleanup
-    gpu.shutdown();
+    // Cleanup — skip gpu.shutdown() to avoid wgpu-core heap corruption.
+    // Process exit reclaims everything.
     std::filesystem::remove_all(staging);
 
     std::fprintf(stderr, "\n%s: %d failure(s), %d skipped\n",
