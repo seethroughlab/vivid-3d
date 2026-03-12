@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -31,6 +32,17 @@ struct Grid : vivid::GpuOperatorBase {
         out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
+        float bmin[3] = {-1, -1, 0}, bmax[3] = {1, 1, 0}; // flat XY plane
+        auto cam = vivid::thumb3d::camera_from_bounds(bmin, bmax,
+                                                       ctx->width, ctx->height);
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            cpu_verts_.data(), static_cast<uint32_t>(cpu_verts_.size() / 5),
+            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
+            5 * sizeof(float), 0, UINT32_MAX, cam);
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         if (ctx->output_handle_count == 0) return;
 
@@ -56,6 +68,8 @@ private:
     VividVertexAttribute attribs_[2]{};
     int built_cols_ = -1;
     int built_rows_ = -1;
+    std::vector<float> cpu_verts_;
+    std::vector<uint32_t> cpu_indices_;
 
     void rebuild(const VividGpuContext* ctx, int c, int r) {
         vivid::gpu::release(vertex_buf_);
@@ -97,6 +111,9 @@ private:
             }
         }
 
+        cpu_verts_ = vdata;
+        cpu_indices_ = idata;
+
         uint64_t vbytes = vertex_count * 5 * sizeof(float);
         {
             WGPUBufferDescriptor bd{};
@@ -135,3 +152,4 @@ private:
 };
 
 VIVID_REGISTER(Grid)
+VIVID_THUMBNAIL(Grid)

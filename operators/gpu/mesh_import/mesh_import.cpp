@@ -8,6 +8,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -82,6 +83,22 @@ struct MeshImport : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
+        float bmin[3], bmax[3];
+        vivid::thumb3d::compute_aabb(
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            sizeof(vivid::gpu::Vertex3D), 0, bmin, bmax);
+        auto cam = vivid::thumb3d::camera_from_bounds(bmin, bmax,
+                                                       ctx->width, ctx->height);
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
+            sizeof(vivid::gpu::Vertex3D), 0, 3 * sizeof(float), cam);
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -760,3 +777,4 @@ private:
 };
 
 VIVID_REGISTER(MeshImport)
+VIVID_THUMBNAIL(MeshImport)

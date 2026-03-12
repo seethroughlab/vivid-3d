@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -147,6 +148,26 @@ struct Deformer : vivid::GpuOperatorBase {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->pixels || displaced_.empty()) return;
+        float bmin[3], bmax[3];
+        vivid::thumb3d::compute_aabb(
+            reinterpret_cast<const float*>(displaced_.data()),
+            static_cast<uint32_t>(displaced_.size()),
+            sizeof(vivid::gpu::Vertex3D), 0, bmin, bmax);
+        auto cam = vivid::thumb3d::camera_from_bounds(bmin, bmax,
+                                                       ctx->width, ctx->height);
+        // Use indices from input fragment if available
+        const uint32_t* idx = fragment_.cpu_indices;
+        uint32_t idx_count = fragment_.cpu_index_count;
+        if (!idx || idx_count == 0) return;
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            reinterpret_cast<const float*>(displaced_.data()),
+            static_cast<uint32_t>(displaced_.size()),
+            idx, idx_count,
+            sizeof(vivid::gpu::Vertex3D), 0, 3 * sizeof(float), cam);
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         // Check input scene
         if (ctx->input_handle_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
@@ -250,3 +271,4 @@ private:
 };
 
 VIVID_REGISTER(Deformer)
+VIVID_THUMBNAIL(Deformer)

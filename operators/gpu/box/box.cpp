@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -34,6 +35,16 @@ struct Box : vivid::GpuOperatorBase {
         out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
+        auto cam = vivid::thumb3d::camera_from_bounds(bbox_min_, bbox_max_,
+                                                       ctx->width, ctx->height);
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            cpu_verts_.data(), static_cast<uint32_t>(cpu_verts_.size() / 8),
+            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
+            8 * sizeof(float), 0, 3 * sizeof(float), cam);
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         if (ctx->output_handle_count == 0) return;
 
@@ -56,6 +67,9 @@ private:
     VividMesh  mesh_{};
     VividVertexAttribute attribs_[3]{};
     float built_w_ = -1.0f, built_h_ = -1.0f, built_d_ = -1.0f;
+    std::vector<float> cpu_verts_;
+    std::vector<uint32_t> cpu_indices_;
+    float bbox_min_[3]{}, bbox_max_[3]{};
 
     void rebuild(const VividGpuContext* ctx, float w, float h, float d) {
         vivid::gpu::release(vertex_buf_);
@@ -108,6 +122,12 @@ private:
             idata[o+3] = b+0; idata[o+4] = b+2; idata[o+5] = b+3;
         }
 
+        cpu_verts_.assign(reinterpret_cast<const float*>(verts),
+                          reinterpret_cast<const float*>(verts) + 24 * 8);
+        cpu_indices_.assign(idata, idata + 36);
+        bbox_min_[0] = -hw; bbox_min_[1] = -hh; bbox_min_[2] = -hd;
+        bbox_max_[0] =  hw; bbox_max_[1] =  hh; bbox_max_[2] =  hd;
+
         uint64_t vbytes = sizeof(verts);
         {
             WGPUBufferDescriptor bd{};
@@ -147,3 +167,4 @@ private:
 };
 
 VIVID_REGISTER(Box)
+VIVID_THUMBNAIL(Box)

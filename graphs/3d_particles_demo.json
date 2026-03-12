@@ -1,9 +1,16 @@
 {
+    "schema_version": 1,
+    "vivid_version": "0.1.0",
     "nodes": {
         "particles": {
             "type": "Particles3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
                 "elongation": 12.113226890563965,
+                "a": 0.800000011920929,
                 "lifetime": 20.53215217590332,
                 "drag": 0.99609375,
                 "noise_speed": 0.1499430388212204,
@@ -11,60 +18,85 @@
                 "noise_octaves": 2.0,
                 "count": 100000.0,
                 "b": 0.20000000298023224,
-                "r": 0.4877115786075592,
-                "a": 0.800000011920929,
-                "noise_scale": 4.934811592102051,
                 "unlit": 1.0,
-                "curl_strength": 6.4827470779418945,
-                "speed": 1.0579427480697632,
-                "size": 0.02883978933095932,
+                "noise_scale": 4.934811592102051,
                 "spread": 30.0,
+                "size": 0.02883978933095932,
+                "speed": 1.0579427480697632,
+                "curl_strength": 6.4827470779418945,
                 "gravity": 0.0,
                 "emission_rate": 1467.556396484375,
+                "r": 0.4877115786075592,
                 "shape": 1.0,
                 "g": 0.5496147871017456
             },
             "layout": {
-                "x": 31.530441284179688,
-                "y": 380.0
+                "x": 57.895294189453125,
+                "y": 334.59832763671875
             }
         },
         "light": {
             "type": "Light3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "intensity": 1.0,
+                "intensity": 3.2112631797790527,
                 "type": 0.0
             },
             "layout": {
-                "x": -13.825054168701172,
+                "x": -13.825050354003906,
                 "y": 615.9121704101562
             }
         },
         "merge": {
-            "type": "SceneMerge"
+            "type": "SceneMerge",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            }
         },
         "render": {
             "type": "Render3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
                 "cam_z": 8.0,
                 "cam_y": 3.0
-            }
+            },
+            "layout": {
+                "x": 630.0,
+                "y": 423.13763427734375
+            },
+            "resolution": [
+                1920,
+                1080
+            ]
         },
         "vout": {
             "type": "video_out",
             "layout": {
-                "x": 630.0,
-                "y": 468.5
+                "x": 941.8571166992188,
+                "y": 369.9976806640625
             }
         },
         "Shape3D1": {
             "type": "Shape3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
+                "emission": 1.5061442852020264,
+                "metallic": 0.7390543818473816,
                 "pos_x": -5.60302734375,
-                "roughness": 0.4149441123008728,
-                "a": 0.3898383378982544,
-                "shape": 6.0,
+                "roughness": 0.2331678569316864,
+                "a": 0.4861518144607544,
                 "r": 0.0316297747194767,
+                "shape": 6.0,
                 "b": 0.2559814453125,
                 "g": 0.0
             },
@@ -88,17 +120,17 @@
             "to": "render/scene"
         },
         {
-            "from": "render/texture",
-            "to": "vout/input"
-        },
-        {
             "from": "Shape3D1/scene",
             "to": "particles/scene"
+        },
+        {
+            "from": "render/texture",
+            "to": "vout/input"
         }
     ],
     "viewport": {
-        "pan_x": 727.1135864257812,
-        "pan_y": 224.63604736328125,
-        "zoom": 0.5937420129776001
+        "pan_x": 218.47532653808594,
+        "pan_y": 99.6919174194336,
+        "zoom": 0.7793283462524414
     }
 }

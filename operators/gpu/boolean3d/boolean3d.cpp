@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_3d.h"
 #include <manifold/manifold.h>
 #include <cstdio>
 #include <cmath>
@@ -156,6 +157,22 @@ struct Boolean3D : vivid::GpuOperatorBase {
         out.push_back(vivid::gpu::scene_port("scene_a", VIVID_PORT_INPUT));
         out.push_back(vivid::gpu::scene_port("scene_b", VIVID_PORT_INPUT));
         out.push_back(vivid::gpu::scene_port("scene",   VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
+        float bmin[3], bmax[3];
+        vivid::thumb3d::compute_aabb(
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            sizeof(Vertex3D), 0, bmin, bmax);
+        auto cam = vivid::thumb3d::camera_from_bounds(bmin, bmax,
+                                                       ctx->width, ctx->height);
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
+            sizeof(Vertex3D), 0, 3 * sizeof(float), cam);
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -389,3 +406,4 @@ private:
 };
 
 VIVID_REGISTER(Boolean3D)
+VIVID_THUMBNAIL(Boolean3D)

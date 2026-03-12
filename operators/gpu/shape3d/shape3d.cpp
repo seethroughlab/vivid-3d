@@ -1,6 +1,7 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -698,113 +699,19 @@ struct Shape3D : vivid::GpuOperatorBase {
     }
 
     void draw_thumbnail(const VividThumbnailContext* ctx) override {
-        if (!ctx || !ctx->pixels) return;
-        const uint32_t w = ctx->width;
-        const uint32_t h = ctx->height;
-        const int s = shape.int_value();
-
-        auto put = [&](uint32_t x, uint32_t y, uint8_t r8, uint8_t g8, uint8_t b8, uint8_t a8) {
-            if (x >= w || y >= h) return;
-            uint8_t* p = ctx->pixels + y * ctx->stride + x * 4;
-            p[0] = r8; p[1] = g8; p[2] = b8; p[3] = a8;
-        };
-
-        // Warm dark background like other built-in thumbnails.
-        for (uint32_t y = 0; y < h; ++y) {
-            for (uint32_t x = 0; x < w; ++x) {
-                put(x, y, 18, 20, 23, 230);
-            }
-        }
-
-        const float cx = static_cast<float>(w) * 0.5f;
-        const float cy = static_cast<float>(h) * 0.5f;
-        const float r0 = std::min(cx, cy) * 0.58f;
-        const float r1 = std::max(2.0f, r0 * 0.60f);
-        const float r_line = 1.4f;
-
-        auto line = [&](float x0, float y0, float x1, float y1) {
-            float dx = x1 - x0;
-            float dy = y1 - y0;
-            float len2 = dx * dx + dy * dy;
-            if (len2 < 1e-5f) return;
-            for (uint32_t y = 0; y < h; ++y) {
-                for (uint32_t x = 0; x < w; ++x) {
-                    float px = static_cast<float>(x) + 0.5f;
-                    float py = static_cast<float>(y) + 0.5f;
-                    float t = ((px - x0) * dx + (py - y0) * dy) / len2;
-                    if (t < 0.0f) t = 0.0f;
-                    if (t > 1.0f) t = 1.0f;
-                    float qx = x0 + t * dx;
-                    float qy = y0 + t * dy;
-                    float ddx = px - qx;
-                    float ddy = py - qy;
-                    if (ddx * ddx + ddy * ddy <= r_line * r_line) {
-                        put(x, y, 170, 196, 220, 235);
-                    }
-                }
-            }
-        };
-
-        // Minimal glyph per shape type.
-        if (s == 0) { // Cube
-            float o = r0 * 0.32f;
-            float x0 = cx - r0 * 0.62f, y0 = cy - r0 * 0.45f;
-            float x1 = cx + r0 * 0.38f, y1 = cy + r0 * 0.30f;
-            line(x0, y0, x1, y0); line(x1, y0, x1, y1); line(x1, y1, x0, y1); line(x0, y1, x0, y0);
-            line(x0 + o, y0 - o, x1 + o, y0 - o); line(x1 + o, y0 - o, x1 + o, y1 - o);
-            line(x1 + o, y1 - o, x0 + o, y1 - o); line(x0 + o, y1 - o, x0 + o, y0 - o);
-            line(x0, y0, x0 + o, y0 - o); line(x1, y0, x1 + o, y0 - o);
-            line(x1, y1, x1 + o, y1 - o); line(x0, y1, x0 + o, y1 - o);
-        } else if (s == 1) { // Sphere
-            for (uint32_t y = 0; y < h; ++y) {
-                for (uint32_t x = 0; x < w; ++x) {
-                    float dx = (static_cast<float>(x) + 0.5f) - cx;
-                    float dy = (static_cast<float>(y) + 0.5f) - cy;
-                    float d = std::sqrt(dx * dx + dy * dy);
-                    if (std::fabs(d - r0) <= 1.2f ||
-                        std::fabs(d - r0 * 0.62f) <= 1.0f ||
-                        std::fabs(dx) <= 0.9f) {
-                        put(x, y, 170, 196, 220, 235);
-                    }
-                }
-            }
-        } else if (s == 2) { // Torus
-            for (uint32_t y = 0; y < h; ++y) {
-                for (uint32_t x = 0; x < w; ++x) {
-                    float dx = (static_cast<float>(x) + 0.5f) - cx;
-                    float dy = (static_cast<float>(y) + 0.5f) - cy;
-                    float d = std::sqrt(dx * dx + dy * dy);
-                    if (std::fabs(d - r0) <= 1.1f || std::fabs(d - r1) <= 1.1f) {
-                        put(x, y, 170, 196, 220, 235);
-                    }
-                }
-            }
-        } else if (s == 3) { // Plane
-            float x0 = cx - r0 * 0.9f, y0 = cy - r0 * 0.42f;
-            float x1 = cx + r0 * 0.9f, y1 = cy + r0 * 0.42f;
-            line(x0, y0, x1, y0); line(x1, y0, x1, y1); line(x1, y1, x0, y1); line(x0, y1, x0, y0);
-            line(x0 + 4.0f, y0 + 4.0f, x1 - 4.0f, y1 - 4.0f);
-            line(x1 - 4.0f, y0 + 4.0f, x0 + 4.0f, y1 - 4.0f);
-        } else if (s == 4) { // Cylinder
-            float x0 = cx - r0 * 0.55f, x1 = cx + r0 * 0.55f;
-            float y0 = cy - r0 * 0.65f, y1 = cy + r0 * 0.65f;
-            line(x0, y0, x1, y0); line(x0, y1, x1, y1);
-            line(x0, y0, x0, y1); line(x1, y0, x1, y1);
-            line(x0 + 2.0f, y0, x1 - 2.0f, y0);
-            line(x0 + 2.0f, y1, x1 - 2.0f, y1);
-        } else if (s == 5) { // Cone
-            float x0 = cx, y0 = cy - r0 * 0.75f;
-            float x1 = cx - r0 * 0.72f, y1 = cy + r0 * 0.65f;
-            float x2 = cx + r0 * 0.72f, y2 = y1;
-            line(x0, y0, x1, y1); line(x0, y0, x2, y2); line(x1, y1, x2, y2);
-        } else { // Pyramid
-            float x0 = cx, y0 = cy - r0 * 0.78f;
-            float x1 = cx - r0 * 0.72f, y1 = cy + r0 * 0.55f;
-            float x2 = cx + r0 * 0.72f, y2 = y1;
-            float xb = cx, yb = cy + r0 * 0.86f;
-            line(x0, y0, x1, y1); line(x0, y0, x2, y2); line(x1, y1, x2, y2);
-            line(x1, y1, xb, yb); line(x2, y2, xb, yb);
-        }
+        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
+        float bmin[3], bmax[3];
+        vivid::thumb3d::compute_aabb(
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            sizeof(vivid::gpu::Vertex3D), 0, bmin, bmax);
+        auto cam = vivid::thumb3d::camera_from_bounds(bmin, bmax,
+                                                       ctx->width, ctx->height);
+        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
+            reinterpret_cast<const float*>(cpu_verts_.data()),
+            static_cast<uint32_t>(cpu_verts_.size()),
+            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
+            sizeof(vivid::gpu::Vertex3D), 0, 3 * sizeof(float), cam);
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
