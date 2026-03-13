@@ -3006,3 +3006,5 @@ fn fs_depth_blit(in: FullscreenOutput) -> @location(0) f32 {
 };
 
 VIVID_REGISTER(Render3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

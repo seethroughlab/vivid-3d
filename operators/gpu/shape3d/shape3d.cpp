@@ -771,7 +771,7 @@ struct Shape3D : vivid::GpuOperatorBase {
         fragment_.pipeline       = nullptr;
         fragment_.material_binds = nullptr;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~Shape3D() override {
@@ -824,3 +824,5 @@ private:
 
 VIVID_REGISTER(Shape3D)
 VIVID_THUMBNAIL(Shape3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

@@ -60,7 +60,7 @@ struct Material3D : vivid::GpuOperatorBase {
 
     void process_gpu(const VividGpuContext* ctx) override {
         // Need scene input
-        bool has_input = ctx->input_handle_count > 0 &&
+        bool has_input = ctx->custom_input_count > 0 &&
                          vivid::gpu::scene_input(ctx, 0) != nullptr;
         if (!has_input) return;
 
@@ -133,7 +133,7 @@ struct Material3D : vivid::GpuOperatorBase {
         output_.children    = &child_;
         output_.child_count = 1;
 
-        ctx->output_handles[0] = &output_;
+        ctx->custom_outputs[0] = &output_;
     }
 
     ~Material3D() override {
@@ -209,3 +209,5 @@ private:
 };
 
 VIVID_REGISTER(Material3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

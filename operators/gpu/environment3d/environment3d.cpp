@@ -443,7 +443,7 @@ struct Environment3D : vivid::GpuOperatorBase {
             fragment_.ibl_brdf_lut    = nullptr;
             fragment_.ibl_sampler     = nullptr;
             fragment_.ibl_intensity   = 0.0f;
-            ctx->output_handles[0] = &fragment_;
+            ctx->custom_outputs[0] = &fragment_;
             return;
         }
 
@@ -480,7 +480,7 @@ struct Environment3D : vivid::GpuOperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~Environment3D() override {
@@ -930,3 +930,5 @@ private:
 };
 
 VIVID_REGISTER(Environment3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

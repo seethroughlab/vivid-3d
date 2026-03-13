@@ -530,7 +530,7 @@ struct Particles3D : vivid::GpuOperatorBase {
         fragment_.roughness = 0.5f;
         fragment_.metallic  = 0.0f;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~Particles3D() override {
@@ -859,3 +859,5 @@ private:
 };
 
 VIVID_REGISTER(Particles3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

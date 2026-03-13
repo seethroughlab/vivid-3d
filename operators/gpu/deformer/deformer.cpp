@@ -170,12 +170,12 @@ struct Deformer : vivid::GpuOperatorBase {
 
     void process_gpu(const VividGpuContext* ctx) override {
         // Check input scene
-        if (ctx->input_handle_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
+        if (ctx->custom_input_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
 
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->cpu_vertices || input->cpu_vertex_count == 0) {
             // Pass through unmodified if no CPU vertex data
-            ctx->output_handles[0] = const_cast<vivid::gpu::VividSceneFragment*>(input);
+            ctx->custom_outputs[0] = const_cast<vivid::gpu::VividSceneFragment*>(input);
             return;
         }
 
@@ -256,7 +256,7 @@ struct Deformer : vivid::GpuOperatorBase {
         fragment_.cpu_vertices     = displaced_.data();
         fragment_.cpu_vertex_count = vc;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~Deformer() override {
@@ -272,3 +272,5 @@ private:
 
 VIVID_REGISTER(Deformer)
 VIVID_THUMBNAIL(Deformer)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

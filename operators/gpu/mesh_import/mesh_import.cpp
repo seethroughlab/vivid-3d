@@ -172,7 +172,7 @@ struct MeshImport : vivid::GpuOperatorBase {
             fragment_.pipeline_flags = 0;
         }
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~MeshImport() override {
@@ -778,3 +778,5 @@ private:
 
 VIVID_REGISTER(MeshImport)
 VIVID_THUMBNAIL(MeshImport)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

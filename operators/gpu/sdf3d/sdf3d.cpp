@@ -568,7 +568,7 @@ struct SDF3D : vivid::GpuOperatorBase {
         fragment_.emission  = emission.value;
         fragment_.unlit     = unlit.int_value() != 0;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~SDF3D() override {
@@ -726,3 +726,5 @@ private:
 };
 
 VIVID_REGISTER(SDF3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

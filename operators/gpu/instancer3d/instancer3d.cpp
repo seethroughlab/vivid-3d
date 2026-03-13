@@ -46,7 +46,7 @@ struct Instancer3D : vivid::GpuOperatorBase {
     void process_gpu(const VividGpuContext* ctx) override {
 
         // Check input scene
-        if (ctx->input_handle_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
+        if (ctx->custom_input_count == 0 || !vivid::gpu::scene_input(ctx, 0)) return;
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->vertex_buffer || input->index_count == 0) return;
 
@@ -226,7 +226,7 @@ struct Instancer3D : vivid::GpuOperatorBase {
         fragment_.instance_buffer = storage_buf_;
         fragment_.instance_count  = n;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
     ~Instancer3D() override {
@@ -283,3 +283,5 @@ private:
 };
 
 VIVID_REGISTER(Instancer3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

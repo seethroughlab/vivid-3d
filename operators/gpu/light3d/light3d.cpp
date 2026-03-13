@@ -73,7 +73,7 @@ struct Light3D : vivid::GpuOperatorBase {
         fragment_.children        = nullptr;
         fragment_.child_count     = 0;
 
-        ctx->output_handles[0] = &fragment_;
+        ctx->custom_outputs[0] = &fragment_;
     }
 
 private:
@@ -81,3 +81,5 @@ private:
 };
 
 VIVID_REGISTER(Light3D)
+
+VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)
