@@ -441,6 +441,15 @@ inline void scene_fragment_identity(VividSceneFragment& f) {
     mat4x4_identity(f.model_matrix);
 }
 
+} // namespace vivid::gpu
+
+VIVID_DECLARE_CUSTOM_REF_TYPE(vivid::gpu::VividSceneFragment,
+                              "seethroughlab.vivid.scene_fragment_v1",
+                              "VividSceneFragment",
+                              false);
+
+namespace vivid::gpu {
+
 // ---------------------------------------------------------------------------
 // PBR texture bind group layout (Phase 6c)
 // ---------------------------------------------------------------------------
