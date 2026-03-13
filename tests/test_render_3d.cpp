@@ -262,9 +262,12 @@ int main() {
     // CPU tests (always run, no GPU needed)
     // =====================================================================
 
-    std::fprintf(stderr, "\n=== CPU Test: VIVID_PORT_HANDLE enum ===\n");
+    std::fprintf(stderr, "\n=== CPU Test: vivid_port_type custom type IDs ===\n");
     {
-        check(VIVID_PORT_HANDLE == 6, "VIVID_PORT_HANDLE == 6");
+        using vivid::gpu::VividSceneFragment;
+        uint32_t tid = vivid_port_type<VividSceneFragment>();
+        check(vivid_is_custom_port_type(tid), "VividSceneFragment type ID has high bit set");
+        check(tid == vivid_port_type<VividSceneFragment>(), "vivid_port_type is stable across calls");
     }
 
     std::fprintf(stderr, "\n=== CPU Test: VividSceneFragment defaults ===\n");
@@ -294,14 +297,16 @@ int main() {
     std::fprintf(stderr, "\n=== CPU Test: port_type_compatible ===\n");
     {
         using vivid::ui::port_type_compatible;
-        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_HANDLE) == true,
-              "DATA <-> DATA compatible");
-        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_TEXTURE) == false,
-              "DATA <-> GPU_TEXTURE incompatible");
-        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_FLOAT) == false,
-              "DATA <-> CONTROL_FLOAT incompatible");
-        check(port_type_compatible(VIVID_PORT_HANDLE, VIVID_PORT_AUDIO) == false,
-              "DATA <-> AUDIO_FLOAT incompatible");
+        using vivid::gpu::VividSceneFragment;
+        uint32_t scene_tid = vivid_port_type<VividSceneFragment>();
+        check(port_type_compatible(scene_tid, scene_tid) == true,
+              "VividSceneFragment <-> VividSceneFragment compatible");
+        check(port_type_compatible(scene_tid, VIVID_PORT_TEXTURE) == false,
+              "VividSceneFragment <-> TEXTURE incompatible");
+        check(port_type_compatible(scene_tid, VIVID_PORT_FLOAT) == false,
+              "VividSceneFragment <-> FLOAT incompatible");
+        check(port_type_compatible(scene_tid, VIVID_PORT_AUDIO) == false,
+              "VividSceneFragment <-> AUDIO incompatible");
     }
 
     // =====================================================================
@@ -363,7 +368,7 @@ int main() {
         auto& ns = sched.nodes_mut()[0];
         check(ns.is_gpu, "Render3D is GPU domain");
         check(ns.has_texture_output, "Render3D has texture output");
-        check(ns.handle_input_port_indices.size() == 1,
+        check(ns.custom_input_port_indices.size() == 1,
               "Render3D has 1 scene input port");
         check(ns.texture_input_port_indices.empty(),
               "Render3D has 0 texture input ports");
