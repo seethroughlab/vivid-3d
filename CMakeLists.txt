@@ -165,6 +165,7 @@ enable_testing()
 set(VIVID_RUNTIME_SOURCES
     ${VIVID_SRC_DIR}/src/runtime/operator_loader.cpp
     ${VIVID_SRC_DIR}/src/runtime/operator_registry.cpp
+    ${VIVID_SRC_DIR}/src/runtime/port_type_registry.cpp
     ${VIVID_SRC_DIR}/src/runtime/wgsl_header_parser.cpp
     ${VIVID_SRC_DIR}/src/runtime/graph.cpp
     ${VIVID_SRC_DIR}/src/runtime/scheduler.cpp
