@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/port_type_registry.h"
 #include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
@@ -11,7 +12,7 @@
 // =============================================================================
 // Sphere — UV sphere mesh generator
 //
-// Output: "mesh" (VIVID_PORT_HANDLE)
+// Output: "mesh" (VIVID_CUSTOM_PORT)
 // Vertices: (lat_segments+1)*(lon_segments+1), interleaved
 //           pos(vec3) + normal(vec3) + uv(vec2) = 32 bytes.
 // Indices:  lat_segments * lon_segments * 6 uint32_t, TriangleList.
@@ -31,7 +32,7 @@ struct Sphere : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
+        out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void draw_thumbnail(const VividThumbnailContext* ctx) override {
@@ -46,7 +47,7 @@ struct Sphere : vivid::GpuOperatorBase {
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_handle_count == 0) return;
+        if (ctx->custom_output_count == 0) return;
 
         int lat = lat_segments.int_value();
         int lon = lon_segments.int_value();
@@ -55,7 +56,7 @@ struct Sphere : vivid::GpuOperatorBase {
             rebuild(ctx, lat, lon);
         }
 
-        ctx->output_handles[0] = &mesh_;
+        ctx->custom_outputs[0] = &mesh_;
     }
 
     ~Sphere() override {
@@ -169,3 +170,5 @@ private:
 
 VIVID_REGISTER(Sphere)
 VIVID_THUMBNAIL(Sphere)
+
+VIVID_DESCRIBE_REF_TYPE(VividMesh)

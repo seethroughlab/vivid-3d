@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/port_type_registry.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -11,7 +12,7 @@
 //              and produces a PointList mesh.
 //
 // Input:  "positions" (VIVID_PORT_SPREAD)
-// Output: "mesh"      (VIVID_PORT_HANDLE, topology PointList)
+// Output: "mesh"      (VIVID_CUSTOM_PORT, topology PointList)
 //
 // Vertex layout: vec2f (xy) = 8 bytes per point.
 // Rebuilds vertex buffer when point count changes; uploads spread data each tick.
@@ -35,11 +36,11 @@ struct PointCloud : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back({"positions", VIVID_PORT_SPREAD, VIVID_PORT_INPUT});
-        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
+        out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_handle_count == 0) return;
+        if (ctx->custom_output_count == 0) return;
 
         // Read positions spread: pairs of [x,y]
         uint32_t spread_len = 0;
@@ -61,7 +62,7 @@ struct PointCloud : vivid::GpuOperatorBase {
                                  spread_data, point_count * 2 * sizeof(float));
         }
 
-        ctx->output_handles[0] = &mesh_;
+        ctx->custom_outputs[0] = &mesh_;
     }
 
     ~PointCloud() override {
@@ -107,3 +108,5 @@ private:
 };
 
 VIVID_REGISTER(PointCloud)
+
+VIVID_DESCRIBE_REF_TYPE(VividMesh)

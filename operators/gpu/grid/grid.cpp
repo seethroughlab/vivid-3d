@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/port_type_registry.h"
 #include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
@@ -10,7 +11,7 @@
 // =============================================================================
 // Grid — subdivided plane mesh generator
 //
-// Output: "mesh" (VIVID_PORT_HANDLE)
+// Output: "mesh" (VIVID_CUSTOM_PORT)
 // Vertices: (cols+1)*(rows+1), interleaved pos(vec3) + uv(vec2) = 20 bytes.
 // Indices:  cols*rows*6 uint32_t, TriangleList.
 // Lazy-rebuilds buffers when cols/rows params change.
@@ -29,7 +30,7 @@ struct Grid : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
+        out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void draw_thumbnail(const VividThumbnailContext* ctx) override {
@@ -44,7 +45,7 @@ struct Grid : vivid::GpuOperatorBase {
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_handle_count == 0) return;
+        if (ctx->custom_output_count == 0) return;
 
         int c = cols.int_value();
         int r = rows.int_value();
@@ -53,7 +54,7 @@ struct Grid : vivid::GpuOperatorBase {
             rebuild(ctx, c, r);
         }
 
-        ctx->output_handles[0] = &mesh_;
+        ctx->custom_outputs[0] = &mesh_;
     }
 
     ~Grid() override {
@@ -153,3 +154,5 @@ private:
 
 VIVID_REGISTER(Grid)
 VIVID_THUMBNAIL(Grid)
+
+VIVID_DESCRIBE_REF_TYPE(VividMesh)

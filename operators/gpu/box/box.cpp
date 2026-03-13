@@ -2,6 +2,7 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
+#include "operator_api/port_type_registry.h"
 #include "operator_api/thumbnail_3d.h"
 #include <cstdio>
 #include <cstring>
@@ -10,7 +11,7 @@
 // =============================================================================
 // Box — axis-aligned box mesh generator with per-face normals
 //
-// Output: "mesh" (VIVID_PORT_HANDLE)
+// Output: "mesh" (VIVID_CUSTOM_PORT)
 // 24 vertices (4 per face × 6 faces), same layout as Sphere:
 //   pos(vec3) + normal(vec3) + uv(vec2) = 32 bytes.
 // 36 indices (6 per face), TriangleList.
@@ -32,7 +33,7 @@ struct Box : vivid::GpuOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back(VIVID_HANDLE_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
+        out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void draw_thumbnail(const VividThumbnailContext* ctx) override {
@@ -46,14 +47,14 @@ struct Box : vivid::GpuOperatorBase {
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
-        if (ctx->output_handle_count == 0) return;
+        if (ctx->custom_output_count == 0) return;
 
         float w = width.value, h = height.value, d = depth.value;
         if (w != built_w_ || h != built_h_ || d != built_d_) {
             rebuild(ctx, w, h, d);
         }
 
-        ctx->output_handles[0] = &mesh_;
+        ctx->custom_outputs[0] = &mesh_;
     }
 
     ~Box() override {
@@ -168,3 +169,5 @@ private:
 
 VIVID_REGISTER(Box)
 VIVID_THUMBNAIL(Box)
+
+VIVID_DESCRIBE_REF_TYPE(VividMesh)
