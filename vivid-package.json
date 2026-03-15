@@ -35,5 +35,14 @@
       { "name": "cgltf", "include": "deps/cgltf" },
       { "name": "tinyobjloader", "include": "deps/tinyobjloader" }
     ]
+  },
+  "tests": {
+    "graphs": [
+      "graphs/3d_hello_world_demo.json",
+      "graphs/3d_shapes_demo.json",
+      "graphs/3d_materials_demo.json",
+      "graphs/3d_particles_demo.json"
+    ],
+    "cpp": []
   }
 }

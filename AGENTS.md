@@ -27,3 +27,4 @@ Before pushing changes:
 2. Run package tests.
 3. Run `vivid` link/rebuild/uninstall cycle against this package.
 4. Run `test_demo_graphs` against this package's `graphs/` directory.
+5. Treat GPU-heavy graph smoke as load/registry coverage first; skipped no-GPU runs are acceptable in headless CI.
