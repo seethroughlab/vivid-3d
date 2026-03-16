@@ -3,7 +3,7 @@
 #include "operator_api/gpu_common.h"
 #include "operator_api/type_id.h"
 #include "operator_api/port_type_registry.h"
-#include "operator_api/thumbnail_3d.h"
+#include "operator_api/thumbnail_3d_gpu.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -37,13 +37,17 @@ struct Box : vivid::GpuOperatorBase {
     }
 
     void draw_thumbnail(const VividThumbnailContext* ctx) override {
-        if (!ctx || !ctx->pixels || cpu_verts_.empty()) return;
-        auto cam = vivid::thumb3d::camera_from_bounds(bbox_min_, bbox_max_,
-                                                       ctx->width, ctx->height);
-        vivid::thumb3d::render_mesh(ctx->pixels, ctx->width, ctx->height, ctx->stride,
-            cpu_verts_.data(), static_cast<uint32_t>(cpu_verts_.size() / 8),
-            cpu_indices_.data(), static_cast<uint32_t>(cpu_indices_.size()),
-            8 * sizeof(float), 0, 3 * sizeof(float), cam);
+        if (!ctx || cpu_verts_.empty() || cpu_indices_.empty()) return;
+        vivid::thumb3d_gpu::render_mesh(
+            ctx,
+            mesh_.vertex_buffer,
+            static_cast<uint64_t>(cpu_verts_.size() * sizeof(float)),
+            mesh_.index_buffer,
+            static_cast<uint32_t>(cpu_indices_.size()),
+            8 * sizeof(float),
+            mesh_.topology,
+            bbox_min_,
+            bbox_max_);
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
