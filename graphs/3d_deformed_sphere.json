@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "id": "3d_deformed_sphere",
+    "title": "Deformed Sphere",
+    "description": "A sphere shape with noise displacement through a Deformer, demonstrating 3D shape thumbnails that render actual mesh geometry with lighting. The Deformer thumbnail shows the displaced mesh in real time.",
+    "tags": ["3d", "deformer", "sphere", "noise", "thumbnail-showcase", "demo"],
+    "difficulty": "beginner",
+    "domains": ["gpu"],
+    "requires_packages": ["vivid-3d"]
+  },
+  "nodes": {
+    "sphere1": {
+      "type": "Shape3D",
+      "params": {
+        "shape": 1.0,
+        "r": 0.4, "g": 0.6, "b": 0.9
+      }
+    },
+    "deformer1": {
+      "type": "Deformer",
+      "params": {
+        "mode": 0,
+        "amplitude": 0.35,
+        "frequency": 4.0,
+        "speed": 0.8,
+        "axis": 0
+      }
+    },
+    "light1": {
+      "type": "Light3D",
+      "params": {
+        "intensity": 1.3,
+        "type": 0.0
+      }
+    },
+    "merge1": {
+      "type": "SceneMerge",
+      "params": {}
+    },
+    "orbit_cam": {
+      "type": "OrbitCamera",
+      "params": {
+        "distance": 4.0,
+        "azimuth": -30,
+        "elevation": 1.2
+      }
+    },
+    "render1": {
+      "type": "Render3D",
+      "resolution": [1920, 1080]
+    },
+    "vout": {
+      "type": "video_out"
+    }
+  },
+  "connections": [
+    { "from": "sphere1/scene",    "to": "deformer1/scene" },
+    { "from": "deformer1/scene",  "to": "merge1/scene_a" },
+    { "from": "light1/scene",     "to": "merge1/scene_b" },
+    { "from": "merge1/scene",     "to": "render1/scene" },
+    { "from": "orbit_cam/cam_x",     "to": "render1/cam_x" },
+    { "from": "orbit_cam/cam_y",     "to": "render1/cam_y" },
+    { "from": "orbit_cam/cam_z",     "to": "render1/cam_z" },
+    { "from": "orbit_cam/target_x",  "to": "render1/target_x" },
+    { "from": "orbit_cam/target_y",  "to": "render1/target_y" },
+    { "from": "orbit_cam/target_z",  "to": "render1/target_z" },
+    { "from": "render1/texture",     "to": "vout/input" }
+  ]
+}
