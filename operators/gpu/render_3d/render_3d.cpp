@@ -68,6 +68,17 @@ fn blinn_phong(N: vec3f, V: vec3f, light: Light, world_pos: vec3f) -> vec2f {
 
     if (light.position_and_type.w < 0.5) {
         L = normalize(light.direction_and_intensity.xyz);
+    } else if (light.position_and_type.w > 1.5) {
+        let to_light = light.position_and_type.xyz - world_pos;
+        let dist = length(to_light);
+        L = to_light / max(dist, 0.001);
+        let radius = light.color_and_radius.w;
+        let ratio = dist / max(radius, 0.001);
+        attenuation = saturate(1.0 - ratio * ratio);
+        let cos_angle = dot(-L, normalize(light.direction_and_intensity.xyz));
+        let cos_outer = light.spot_params.x;
+        let cos_inner = light.spot_params.y;
+        attenuation *= saturate((cos_angle - cos_outer) / max(cos_inner - cos_outer, 0.001));
     } else {
         let to_light = light.position_and_type.xyz - world_pos;
         let dist = length(to_light);
@@ -283,6 +294,17 @@ fn blinn_phong_i(N: vec3f, V: vec3f, light: Light, world_pos: vec3f) -> vec2f {
 
     if (light.position_and_type.w < 0.5) {
         L = normalize(light.direction_and_intensity.xyz);
+    } else if (light.position_and_type.w > 1.5) {
+        let to_light = light.position_and_type.xyz - world_pos;
+        let dist = length(to_light);
+        L = to_light / max(dist, 0.001);
+        let radius = light.color_and_radius.w;
+        let ratio = dist / max(radius, 0.001);
+        attenuation = saturate(1.0 - ratio * ratio);
+        let cos_angle = dot(-L, normalize(light.direction_and_intensity.xyz));
+        let cos_outer = light.spot_params.x;
+        let cos_inner = light.spot_params.y;
+        attenuation *= saturate((cos_angle - cos_outer) / max(cos_inner - cos_outer, 0.001));
     } else {
         let to_light = light.position_and_type.xyz - world_pos;
         let dist = length(to_light);
@@ -568,6 +590,17 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
         var attenuation: f32 = 1.0;
         if (light.position_and_type.w < 0.5) {
             L = normalize(light.direction_and_intensity.xyz);
+        } else if (light.position_and_type.w > 1.5) {
+            let to_light = light.position_and_type.xyz - in.world_pos;
+            let dist = length(to_light);
+            L = to_light / max(dist, 0.001);
+            let radius = light.color_and_radius.w;
+            let ratio = dist / max(radius, 0.001);
+            attenuation = saturate(1.0 - ratio * ratio);
+            let cos_angle = dot(-L, normalize(light.direction_and_intensity.xyz));
+            let cos_outer = light.spot_params.x;
+            let cos_inner = light.spot_params.y;
+            attenuation *= saturate((cos_angle - cos_outer) / max(cos_inner - cos_outer, 0.001));
         } else {
             let to_light = light.position_and_type.xyz - in.world_pos;
             let dist = length(to_light);
@@ -692,6 +725,17 @@ fn blinn_phong(N: vec3f, V: vec3f, light: Light, world_pos: vec3f) -> vec2f {
 
     if (light.position_and_type.w < 0.5) {
         L = normalize(light.direction_and_intensity.xyz);
+    } else if (light.position_and_type.w > 1.5) {
+        let to_light = light.position_and_type.xyz - world_pos;
+        let dist = length(to_light);
+        L = to_light / max(dist, 0.001);
+        let radius = light.color_and_radius.w;
+        let ratio = dist / max(radius, 0.001);
+        attenuation = saturate(1.0 - ratio * ratio);
+        let cos_angle = dot(-L, normalize(light.direction_and_intensity.xyz));
+        let cos_outer = light.spot_params.x;
+        let cos_inner = light.spot_params.y;
+        attenuation *= saturate((cos_angle - cos_outer) / max(cos_inner - cos_outer, 0.001));
     } else {
         let to_light = light.position_and_type.xyz - world_pos;
         let dist = length(to_light);
@@ -894,6 +938,17 @@ fn fs_textured(in: Vertex3DOutput) -> @location(0) vec4f {
         var attenuation: f32 = 1.0;
         if (light.position_and_type.w < 0.5) {
             L = normalize(light.direction_and_intensity.xyz);
+        } else if (light.position_and_type.w > 1.5) {
+            let to_light = light.position_and_type.xyz - in.world_pos;
+            let dist = length(to_light);
+            L = to_light / max(dist, 0.001);
+            let radius = light.color_and_radius.w;
+            let ratio = dist / max(radius, 0.001);
+            attenuation = saturate(1.0 - ratio * ratio);
+            let cos_angle = dot(-L, normalize(light.direction_and_intensity.xyz));
+            let cos_outer = light.spot_params.x;
+            let cos_inner = light.spot_params.y;
+            attenuation *= saturate((cos_angle - cos_outer) / max(cos_inner - cos_outer, 0.001));
         } else {
             let to_light = light.position_and_type.xyz - in.world_pos;
             let dist = length(to_light);
@@ -988,15 +1043,16 @@ struct LightData {
     float position_and_type[4];
     float direction_and_intensity[4];
     float color_and_radius[4];
+    float spot_params[4];
 };
-static_assert(sizeof(LightData) == 48, "LightData must be 48 bytes");
+static_assert(sizeof(LightData) == 64, "LightData must be 64 bytes");
 
 struct LightsUniform {
-    LightData lights[4];   // 192 bytes
+    LightData lights[4];   // 256 bytes
     uint32_t light_count;  // 4 bytes
     float ambient[3];      // 12 bytes
 };
-static_assert(sizeof(LightsUniform) == 208, "LightsUniform must be 208 bytes");
+static_assert(sizeof(LightsUniform) == 272, "LightsUniform must be 272 bytes");
 
 struct ShadowUniform {
     float light_vp[4][16];      // 4 lights × 64 bytes = 256 bytes
@@ -1063,6 +1119,8 @@ struct CollectedLight {
     float intensity;
     float color[3];
     float radius;
+    float spot_angle_cos;   // cos(outer cone angle)
+    float spot_inner_cos;   // cos(inner cone angle)
 };
 
 static void collect_fragments(const vivid::gpu::VividSceneFragment* node,
@@ -1102,6 +1160,29 @@ static void collect_fragments(const vivid::gpu::VividSceneFragment* node,
                 cl.direction[0] = dx;
                 cl.direction[1] = dy;
                 cl.direction[2] = dz;
+            } else if (node->light_type > 1.5f) {
+                // Spot: position from translation, direction rotated by composed transform
+                cl.position[0] = composed[3][0];
+                cl.position[1] = composed[3][1];
+                cl.position[2] = composed[3][2];
+                // Rotate direction by the upper-3x3 of composed transform
+                float dx = node->light_direction[0];
+                float dy = node->light_direction[1];
+                float dz = node->light_direction[2];
+                float rx = composed[0][0]*dx + composed[1][0]*dy + composed[2][0]*dz;
+                float ry = composed[0][1]*dx + composed[1][1]*dy + composed[2][1]*dz;
+                float rz = composed[0][2]*dx + composed[1][2]*dy + composed[2][2]*dz;
+                float rlen = std::sqrt(rx*rx + ry*ry + rz*rz);
+                if (rlen > 1e-8f) { rx /= rlen; ry /= rlen; rz /= rlen; }
+                cl.direction[0] = rx;
+                cl.direction[1] = ry;
+                cl.direction[2] = rz;
+                float outer_deg = node->light_spot_angle;
+                float blend = node->light_spot_blend;
+                float outer_rad = outer_deg * 3.14159265358979f / 180.0f;
+                float inner_rad = outer_rad * (1.0f - blend);
+                cl.spot_angle_cos = std::cos(outer_rad);
+                cl.spot_inner_cos = std::cos(inner_rad);
             } else {
                 // Point: position from translation column
                 cl.position[0] = composed[3][0];
@@ -1403,6 +1484,10 @@ struct Render3D : vivid::GpuOperatorBase {
             ld.color_and_radius[1] = cl.color[1];
             ld.color_and_radius[2] = cl.color[2];
             ld.color_and_radius[3] = cl.radius;
+            ld.spot_params[0] = cl.spot_angle_cos;
+            ld.spot_params[1] = cl.spot_inner_cos;
+            ld.spot_params[2] = 0.0f;
+            ld.spot_params[3] = 0.0f;
         }
         wgpuQueueWriteBuffer(ctx->queue, lights_ubo_, 0, &lights_data, sizeof(lights_data));
 

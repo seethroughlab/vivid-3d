@@ -27,7 +27,10 @@
     "gpu/ssao3d",
     "gpu/dof3d",
     "gpu/environment3d",
-    "gpu/boolean3d"
+    "gpu/boolean3d",
+    "gpu/depth_mask3d",
+    "gpu/mesh_builder",
+    "gpu/sweep"
   ],
   "operators": [],
   "dependencies": {

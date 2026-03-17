@@ -79,13 +79,13 @@ struct HeadlessGpu {
         };
         dcb.userdata1 = &dd;
         WGPUDeviceDescriptor dev_desc{};
-        dev_desc.label = vivid::to_sv("Scene3D Test Device");
+        dev_desc.label = vivid::to_sv("Sweep Test Device");
         dev_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
         dev_desc.deviceLostCallbackInfo.callback =
             [](WGPUDevice const*, WGPUDeviceLostReason, WGPUStringView, void*, void*) {};
         dev_desc.uncapturedErrorCallbackInfo.callback =
             [](WGPUDevice const*, WGPUErrorType type, WGPUStringView msg, void*, void*) {
-                std::fprintf(stderr, "[scene3d_test] WebGPU error (%d): %.*s\n",
+                std::fprintf(stderr, "[sweep_test] WebGPU error (%d): %.*s\n",
                              static_cast<int>(type), static_cast<int>(msg.length),
                              msg.data ? msg.data : "");
             };
@@ -236,110 +236,13 @@ int main() {
     static constexpr WGPUTextureFormat kFormat = WGPUTextureFormat_RGBA8Unorm;
 
     // =====================================================================
-    // CPU tests (always run, no GPU needed)
+    // GPU integration tests
     // =====================================================================
 
-    std::fprintf(stderr, "\n=== CPU Test: Transform composition (identity) ===\n");
-    {
-        // Identity Transform3D preserves input model_matrix
-        VividSceneFragment input{};
-        scene_fragment_identity(input);
-        // Set a known translation on input
-        input.model_matrix[3][0] = 1.0f;
-        input.model_matrix[3][1] = 2.0f;
-        input.model_matrix[3][2] = 3.0f;
-
-        // Identity transform wrapper
-        VividSceneFragment wrapper{};
-        scene_fragment_identity(wrapper);
-        VividSceneFragment* child = &input;
-        wrapper.children    = &child;
-        wrapper.child_count = 1;
-
-        // Compose: identity * input = input
-        mat4x4 composed;
-        mat4x4_mul(composed, wrapper.model_matrix, input.model_matrix);
-
-        check(std::fabs(composed[3][0] - 1.0f) < 1e-5f, "composed X = 1.0 (identity pass-through)");
-        check(std::fabs(composed[3][1] - 2.0f) < 1e-5f, "composed Y = 2.0 (identity pass-through)");
-        check(std::fabs(composed[3][2] - 3.0f) < 1e-5f, "composed Z = 3.0 (identity pass-through)");
-    }
-
-    std::fprintf(stderr, "\n=== CPU Test: Transform composition (translation) ===\n");
-    {
-        // Transform3D at (10,0,0) wrapping input at (1,2,3) → composed at (11,2,3)
-        VividSceneFragment input{};
-        scene_fragment_identity(input);
-        input.model_matrix[3][0] = 1.0f;
-        input.model_matrix[3][1] = 2.0f;
-        input.model_matrix[3][2] = 3.0f;
-
-        VividSceneFragment wrapper{};
-        mat4x4_translate(wrapper.model_matrix, 10.0f, 0.0f, 0.0f);
-
-        mat4x4 composed;
-        mat4x4_mul(composed, wrapper.model_matrix, input.model_matrix);
-
-        check(std::fabs(composed[3][0] - 11.0f) < 1e-5f, "composed X = 11.0 (10 + 1)");
-        check(std::fabs(composed[3][1] - 2.0f) < 1e-5f,  "composed Y = 2.0");
-        check(std::fabs(composed[3][2] - 3.0f) < 1e-5f,  "composed Z = 3.0");
-    }
-
-    std::fprintf(stderr, "\n=== CPU Test: SceneMerge collection ===\n");
-    {
-        VividSceneFragment a{}, b{};
-        scene_fragment_identity(a);
-        scene_fragment_identity(b);
-        a.model_matrix[3][0] = 1.0f;
-        b.model_matrix[3][0] = -1.0f;
-
-        VividSceneFragment* children[4]{};
-        children[0] = &a;
-        children[1] = &b;
-        uint32_t count = 2;
-
-        VividSceneFragment merger{};
-        scene_fragment_identity(merger);
-        merger.children    = children;
-        merger.child_count = count;
-
-        check(merger.child_count == 2, "merged child_count == 2");
-        check(merger.children[0] == &a, "children[0] points to a");
-        check(merger.children[1] == &b, "children[1] points to b");
-    }
-
-    std::fprintf(stderr, "\n=== CPU Test: Light fragment fields ===\n");
-    {
-        VividSceneFragment light{};
-        scene_fragment_identity(light);
-        light.fragment_type   = VividSceneFragment::LIGHT;
-        light.light_type      = 0.0f;  // directional
-        light.light_color[0]  = 1.0f;
-        light.light_color[1]  = 0.5f;
-        light.light_color[2]  = 0.0f;
-        light.light_intensity = 2.0f;
-        light.light_radius    = 15.0f;
-
-        check(light.fragment_type == VividSceneFragment::LIGHT, "fragment_type == LIGHT");
-        check(light.light_type == 0.0f, "light_type == 0 (directional)");
-        check(std::fabs(light.light_color[0] - 1.0f) < 1e-6f, "light_color.r == 1.0");
-        check(std::fabs(light.light_color[1] - 0.5f) < 1e-6f, "light_color.g == 0.5");
-        check(std::fabs(light.light_color[2] - 0.0f) < 1e-6f, "light_color.b == 0.0");
-        check(std::fabs(light.light_intensity - 2.0f) < 1e-6f, "light_intensity == 2.0");
-        check(std::fabs(light.light_radius - 15.0f) < 1e-6f, "light_radius == 15.0");
-    }
-
-    // =====================================================================
-    // GPU integration tests (skip if no dylibs or no adapter)
-    // =====================================================================
-
-    std::string staging = "./.test_scene3d_staging";
+    std::string staging = "./.test_sweep_staging";
     std::filesystem::create_directories(staging);
 
-    const char* dylibs[] = {
-        "shape3d.dylib", "render_3d.dylib", "transform3d.dylib",
-        "scene_merge.dylib", "light3d.dylib"
-    };
+    const char* dylibs[] = { "sweep.dylib", "render_3d.dylib" };
     bool all_dylibs = true;
     for (auto* name : dylibs) {
         if (std::filesystem::exists(name)) {
@@ -360,11 +263,8 @@ int main() {
 
     vivid::OperatorRegistry registry;
     check(registry.scan(staging.c_str()), "registry.scan() succeeds");
-    check(registry.find("Shape3D") != nullptr, "Shape3D registered");
+    check(registry.find("Sweep") != nullptr, "Sweep registered");
     check(registry.find("Render3D") != nullptr, "Render3D registered");
-    check(registry.find("Transform3D") != nullptr, "Transform3D registered");
-    check(registry.find("SceneMerge") != nullptr, "SceneMerge registered");
-    check(registry.find("Light3D") != nullptr, "Light3D registered");
 
     std::fprintf(stderr, "\n=== GPU init ===\n");
     HeadlessGpu gpu;
@@ -389,218 +289,16 @@ int main() {
     };
 
     // -----------------------------------------------------------------
-    // GPU Test: Shape3D → Transform3D (identity) → Render3D — visible
+    // GPU Test 1: Line path + Circle profile (defaults) -> non-black
     // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Shape3D -> Transform3D(identity) -> Render3D ===\n");
+    std::fprintf(stderr, "\n=== GPU Test: Line path + Circle profile (defaults) ===\n");
     {
         constexpr uint32_t W = 64, H = 64;
 
         vivid::Graph g;
-        g.add_node("s1", "Shape3D");       // default cube at origin
-        g.add_node("t1", "Transform3D");   // identity transform
+        g.add_node("sw", "Sweep");
         g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "t1", "scene");
-        g.add_connection("t1", "scene", "r1", "scene");
-
-        vivid::Scheduler sched;
-        check(sched.build(g, registry), "build succeeds");
-        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
-
-        tick_and_submit(sched, gpu, kFormat);
-
-        auto pixels = get_center_pixel(sched, W, H, "r1");
-        check(!pixels.empty(), "readback returned pixels");
-
-        if (!pixels.empty()) {
-            uint32_t cx = W / 2, cy = H / 2;
-            size_t idx = (cy * W + cx) * 4;
-            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
-            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
-                         rv, gv, bv, pixels[idx+3]);
-            check(rv > 0 || gv > 0 || bv > 0, "center pixel is non-black (transform pass-through)");
-        }
-
-        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
-        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
-        // operator instances + GPU resources is safe for test processes.
-        gpu.leak_and_reinit();
-    }
-
-    // -----------------------------------------------------------------
-    // GPU Test: Transform3D off-screen (pos_x=100) → center is black
-    // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Transform3D off-screen ===\n");
-    {
-        constexpr uint32_t W = 64, H = 64;
-
-        vivid::Graph g;
-        g.add_node("s1", "Shape3D");
-        g.add_node("t1", "Transform3D", {{"pos_x", 100.0f}});
-        g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "t1", "scene");
-        g.add_connection("t1", "scene", "r1", "scene");
-
-        vivid::Scheduler sched;
-        check(sched.build(g, registry), "build succeeds");
-        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
-
-        tick_and_submit(sched, gpu, kFormat);
-
-        auto pixels = get_center_pixel(sched, W, H, "r1");
-        check(!pixels.empty(), "readback returned pixels");
-
-        if (!pixels.empty()) {
-            uint32_t cx = W / 2, cy = H / 2;
-            size_t idx = (cy * W + cx) * 4;
-            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
-            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
-                         rv, gv, bv, pixels[idx+3]);
-            check(rv == 0 && gv == 0 && bv == 0, "center pixel is black (off-screen)");
-        }
-
-        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
-        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
-        // operator instances + GPU resources is safe for test processes.
-        gpu.leak_and_reinit();
-    }
-
-    // -----------------------------------------------------------------
-    // GPU Test: SceneMerge two shapes → both visible
-    // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: SceneMerge two shapes ===\n");
-    {
-        constexpr uint32_t W = 64, H = 64;
-
-        vivid::Graph g;
-        g.add_node("s1", "Shape3D");  // cube at origin
-        g.add_node("s2", "Shape3D", {{"shape", 1.0f}});  // sphere at origin
-        g.add_node("m1", "SceneMerge");
-        g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "m1", "scene_a");
-        g.add_connection("s2", "scene", "m1", "scene_b");
-        g.add_connection("m1", "scene", "r1", "scene");
-
-        vivid::Scheduler sched;
-        check(sched.build(g, registry), "build succeeds");
-        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
-
-        tick_and_submit(sched, gpu, kFormat);
-
-        auto pixels = get_center_pixel(sched, W, H, "r1");
-        check(!pixels.empty(), "readback returned pixels");
-
-        if (!pixels.empty()) {
-            uint32_t cx = W / 2, cy = H / 2;
-            size_t idx = (cy * W + cx) * 4;
-            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
-            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
-                         rv, gv, bv, pixels[idx+3]);
-            check(rv > 0 || gv > 0 || bv > 0, "center pixel non-black (merged scene visible)");
-        }
-
-        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
-        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
-        // operator instances + GPU resources is safe for test processes.
-        gpu.leak_and_reinit();
-    }
-
-    // -----------------------------------------------------------------
-    // GPU Test: Light3D red light → red dominates
-    // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Light3D red light ===\n");
-    {
-        constexpr uint32_t W = 64, H = 64;
-
-        vivid::Graph g;
-        // White shape so light color shows through
-        g.add_node("s1", "Shape3D", {{"r", 1.0f}, {"g", 1.0f}, {"b", 1.0f}});
-        g.add_node("l1", "Light3D", {{"r", 1.0f}, {"g", 0.0f}, {"b", 0.0f}, {"intensity", 1.0f}});
-        g.add_node("m1", "SceneMerge");
-        g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "m1", "scene_a");
-        g.add_connection("l1", "scene", "m1", "scene_b");
-        g.add_connection("m1", "scene", "r1", "scene");
-
-        vivid::Scheduler sched;
-        check(sched.build(g, registry), "build succeeds");
-        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
-
-        tick_and_submit(sched, gpu, kFormat);
-
-        auto pixels = get_center_pixel(sched, W, H, "r1");
-        check(!pixels.empty(), "readback returned pixels");
-
-        if (!pixels.empty()) {
-            uint32_t cx = W / 2, cy = H / 2;
-            size_t idx = (cy * W + cx) * 4;
-            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
-            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
-                         rv, gv, bv, pixels[idx+3]);
-            check(rv > gv && rv > bv, "red channel dominates with red Light3D");
-        }
-
-        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
-        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
-        // operator instances + GPU resources is safe for test processes.
-        gpu.leak_and_reinit();
-    }
-
-    // -----------------------------------------------------------------
-    // GPU Test: Light3D spot light (type=2) → illuminates center
-    // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Light3D spot light ===\n");
-    {
-        constexpr uint32_t W = 64, H = 64;
-
-        vivid::Graph g;
-        g.add_node("s1", "Shape3D", {{"r", 1.0f}, {"g", 1.0f}, {"b", 1.0f}});
-        // Spot light in front of cube, same direction as camera view
-        g.add_node("l1", "Light3D", {
-            {"type", 2.0f},          // Spot
-            {"pos_x", 0.0f}, {"pos_y", 2.0f}, {"pos_z", 5.0f},
-            {"dir_x", 0.0f}, {"dir_y", -0.37f}, {"dir_z", -0.93f},
-            {"spot_angle", 45.0f}, {"spot_blend", 0.3f},
-            {"r", 0.0f}, {"g", 1.0f}, {"b", 0.0f},
-            {"intensity", 2.0f}, {"radius", 20.0f}
-        });
-        g.add_node("m1", "SceneMerge");
-        g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "m1", "scene_a");
-        g.add_connection("l1", "scene", "m1", "scene_b");
-        g.add_connection("m1", "scene", "r1", "scene");
-
-        vivid::Scheduler sched;
-        check(sched.build(g, registry), "build succeeds");
-        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
-
-        tick_and_submit(sched, gpu, kFormat);
-
-        auto pixels = get_center_pixel(sched, W, H, "r1");
-        check(!pixels.empty(), "readback returned pixels");
-
-        if (!pixels.empty()) {
-            uint32_t cx = W / 2, cy = H / 2;
-            size_t idx = (cy * W + cx) * 4;
-            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
-            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
-                         rv, gv, bv, pixels[idx+3]);
-            check(gv > rv && gv > bv, "green channel dominates with green spot Light3D");
-        }
-
-        gpu.leak_and_reinit();
-    }
-
-    // -----------------------------------------------------------------
-    // GPU Test: Backward compat — Shape3D → Render3D (no Light3D) still works
-    // -----------------------------------------------------------------
-    std::fprintf(stderr, "\n=== GPU Test: Backward compat (no Light3D) ===\n");
-    {
-        constexpr uint32_t W = 64, H = 64;
-
-        vivid::Graph g;
-        g.add_node("s1", "Shape3D");
-        g.add_node("r1", "Render3D");
-        g.add_connection("s1", "scene", "r1", "scene");
+        g.add_connection("sw", "scene", "r1", "scene");
 
         vivid::Scheduler sched;
         check(sched.build(g, registry), "build succeeds");
@@ -618,7 +316,118 @@ int main() {
             std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
                          rv, gv, bv, pixels[idx+3]);
             check(rv > 0 || gv > 0 || bv > 0,
-                  "center pixel non-black (default light fallback works)");
+                  "center pixel non-black (line path + circle profile)");
+        }
+
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
+    }
+
+    // -----------------------------------------------------------------
+    // GPU Test 2: Helix path + Circle profile -> non-black
+    // -----------------------------------------------------------------
+    std::fprintf(stderr, "\n=== GPU Test: Helix path + Circle profile ===\n");
+    {
+        constexpr uint32_t W = 64, H = 64;
+
+        vivid::Graph g;
+        g.add_node("sw", "Sweep", {{"path_type", 1.0f}, {"path_radius", 1.0f}, {"path_turns", 2.0f}});
+        g.add_node("r1", "Render3D");
+        g.add_connection("sw", "scene", "r1", "scene");
+
+        vivid::Scheduler sched;
+        check(sched.build(g, registry), "build succeeds");
+        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+
+        tick_and_submit(sched, gpu, kFormat);
+
+        auto pixels = get_center_pixel(sched, W, H, "r1");
+        check(!pixels.empty(), "readback returned pixels");
+
+        if (!pixels.empty()) {
+            uint32_t cx = W / 2, cy = H / 2;
+            size_t idx = (cy * W + cx) * 4;
+            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
+            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
+                         rv, gv, bv, pixels[idx+3]);
+            check(rv > 0 || gv > 0 || bv > 0,
+                  "center pixel non-black (helix path + circle profile)");
+        }
+
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
+    }
+
+    // -----------------------------------------------------------------
+    // GPU Test 3: Circle path + Square profile -> non-black
+    // -----------------------------------------------------------------
+    std::fprintf(stderr, "\n=== GPU Test: Circle path + Square profile ===\n");
+    {
+        constexpr uint32_t W = 64, H = 64;
+
+        vivid::Graph g;
+        g.add_node("sw", "Sweep", {{"path_type", 2.0f}, {"profile_type", 1.0f}, {"path_radius", 0.5f}, {"profile_radius", 0.4f}});
+        g.add_node("r1", "Render3D");
+        g.add_connection("sw", "scene", "r1", "scene");
+
+        vivid::Scheduler sched;
+        check(sched.build(g, registry), "build succeeds");
+        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+
+        tick_and_submit(sched, gpu, kFormat);
+
+        auto pixels = get_center_pixel(sched, W, H, "r1");
+        check(!pixels.empty(), "readback returned pixels");
+
+        if (!pixels.empty()) {
+            uint32_t cx = W / 2, cy = H / 2;
+            size_t idx = (cy * W + cx) * 4;
+            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
+            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
+                         rv, gv, bv, pixels[idx+3]);
+            check(rv > 0 || gv > 0 || bv > 0,
+                  "center pixel non-black (circle path + square profile)");
+        }
+
+        // NOTE: sched.shutdown() intentionally omitted — wgpu-core v27 has a
+        // resource cleanup bug that corrupts the heap on macOS.  Leaking the
+        // operator instances + GPU resources is safe for test processes.
+        gpu.leak_and_reinit();
+    }
+
+    // -----------------------------------------------------------------
+    // GPU Test 4: Arc path + Star profile -> non-black
+    // -----------------------------------------------------------------
+    std::fprintf(stderr, "\n=== GPU Test: Arc path + Star profile ===\n");
+    {
+        constexpr uint32_t W = 64, H = 64;
+
+        vivid::Graph g;
+        g.add_node("sw", "Sweep", {{"path_type", 3.0f}, {"profile_type", 2.0f}, {"path_radius", 0.5f}, {"profile_radius", 0.4f}});
+        g.add_node("r1", "Render3D");
+        g.add_connection("sw", "scene", "r1", "scene");
+
+        vivid::Scheduler sched;
+        check(sched.build(g, registry), "build succeeds");
+        sched.allocate_gpu_textures(gpu.device, W, H, kFormat, WGPUTextureUsage_CopySrc);
+
+        tick_and_submit(sched, gpu, kFormat);
+
+        auto pixels = get_center_pixel(sched, W, H, "r1");
+        check(!pixels.empty(), "readback returned pixels");
+
+        if (!pixels.empty()) {
+            uint32_t cx = W / 2, cy = H / 2;
+            size_t idx = (cy * W + cx) * 4;
+            uint8_t rv = pixels[idx], gv = pixels[idx+1], bv = pixels[idx+2];
+            std::fprintf(stderr, "  Center pixel: (%u, %u, %u, %u)\n",
+                         rv, gv, bv, pixels[idx+3]);
+            check(rv > 0 || gv > 0 || bv > 0,
+                  "center pixel non-black (arc path + star profile)");
         }
 
     }

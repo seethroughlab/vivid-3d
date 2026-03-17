@@ -10,7 +10,7 @@ struct Light3D : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Light3D";
     static constexpr bool kTimeDependent = false;
 
-    vivid::Param<int>   type      {"type",      0, {"Directional", "Point"}};
+    vivid::Param<int>   type      {"type",      0, {"Directional", "Point", "Spot"}};
     vivid::Param<float> intensity {"intensity", 1.0f, 0.0f, 10.0f};
     vivid::Param<float> r         {"r",         1.0f, 0.0f, 1.0f};
     vivid::Param<float> g         {"g",         1.0f, 0.0f, 1.0f};
@@ -19,6 +19,15 @@ struct Light3D : vivid::GpuOperatorBase {
     vivid::Param<float> pos_x     {"pos_x",     0.5f, -50.0f, 50.0f};
     vivid::Param<float> pos_y     {"pos_y",     1.0f, -50.0f, 50.0f};
     vivid::Param<float> pos_z     {"pos_z",     0.8f, -50.0f, 50.0f};
+
+    // Spot light direction
+    vivid::Param<float> dir_x     {"dir_x",     0.0f, -1.0f, 1.0f};
+    vivid::Param<float> dir_y     {"dir_y",    -1.0f, -1.0f, 1.0f};
+    vivid::Param<float> dir_z     {"dir_z",     0.0f, -1.0f, 1.0f};
+
+    // Spot light cone params
+    vivid::Param<float> spot_angle {"spot_angle", 45.0f, 5.0f, 90.0f};
+    vivid::Param<float> spot_blend {"spot_blend", 0.1f, 0.0f, 1.0f};
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         vivid::param_group(type, "Light");
@@ -36,6 +45,13 @@ struct Light3D : vivid::GpuOperatorBase {
         vivid::param_group(pos_y, "Position");
         vivid::param_group(pos_z, "Position");
 
+        vivid::param_group(dir_x, "Direction");
+        vivid::param_group(dir_y, "Direction");
+        vivid::param_group(dir_z, "Direction");
+
+        vivid::param_group(spot_angle, "Spot");
+        vivid::param_group(spot_blend, "Spot");
+
         out.push_back(&type);
         out.push_back(&intensity);
         out.push_back(&r);
@@ -45,6 +61,11 @@ struct Light3D : vivid::GpuOperatorBase {
         out.push_back(&pos_x);
         out.push_back(&pos_y);
         out.push_back(&pos_z);
+        out.push_back(&dir_x);
+        out.push_back(&dir_y);
+        out.push_back(&dir_z);
+        out.push_back(&spot_angle);
+        out.push_back(&spot_blend);
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
@@ -59,6 +80,13 @@ struct Light3D : vivid::GpuOperatorBase {
         fragment_.light_color[2]  = b.value;
         fragment_.light_intensity = intensity.value;
         fragment_.light_radius    = radius.value;
+
+        // Spot light params
+        fragment_.light_direction[0] = dir_x.value;
+        fragment_.light_direction[1] = dir_y.value;
+        fragment_.light_direction[2] = dir_z.value;
+        fragment_.light_spot_angle   = spot_angle.value;
+        fragment_.light_spot_blend   = spot_blend.value;
 
         // Position/direction encoded in model_matrix translation
         mat4x4_translate(fragment_.model_matrix, pos_x.value, pos_y.value, pos_z.value);

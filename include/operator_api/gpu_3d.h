@@ -383,6 +383,9 @@ struct VividSceneFragment {
     float light_color[3]         = {1,1,1};
     float light_intensity        = 1.0f;
     float light_radius           = 10.0f;  // attenuation radius (point lights)
+    float light_direction[3]     = {0, -1, 0};  // spot light aim direction
+    float light_spot_angle       = 45.0f;       // outer cone half-angle (degrees)
+    float light_spot_blend       = 0.1f;        // inner/outer blend (0=hard, 1=soft)
 
     // Instancing (Phase 4)
     WGPUBuffer  instance_buffer   = nullptr;  // storage buffer, per-instance data
@@ -558,13 +561,14 @@ fn transform3d(camera: Camera3D, pos: vec3f, normal: vec3f, tangent: vec4f, uv: 
 
 inline constexpr const char* LIGHTS_3D_WGSL = R"(
 struct Light {
-    position_and_type: vec4f,          // xyz=position/direction, w=type (0=dir, 1=point)
+    position_and_type: vec4f,          // xyz=position/direction, w=type (0=dir, 1=point, 2=spot)
     direction_and_intensity: vec4f,    // xyz=direction, w=intensity
     color_and_radius: vec4f,           // xyz=color, w=radius
+    spot_params: vec4f,                // x=cos(outerAngle), y=cos(innerAngle), zw=0
 }
 
 struct LightsUniform {
-    lights: array<Light, 4>,           // 48*4 = 192 bytes
+    lights: array<Light, 4>,           // 64*4 = 256 bytes
     light_count: u32,                  // active count (0-4)
     ambient_r: f32,
     ambient_g: f32,

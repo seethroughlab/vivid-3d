@@ -132,6 +132,9 @@ add_3d_operator(material3d    operators/gpu/material3d/material3d.cpp)
 add_3d_operator(ssao3d        operators/gpu/ssao3d/ssao3d.cpp)
 add_3d_operator(dof3d         operators/gpu/dof3d/dof3d.cpp)
 add_3d_operator(environment3d operators/gpu/environment3d/environment3d.cpp)
+add_3d_operator(depth_mask3d  operators/gpu/depth_mask3d/depth_mask3d.cpp)
+add_3d_operator(mesh_builder  operators/gpu/mesh_builder/mesh_builder.cpp)
+add_3d_operator(sweep         operators/gpu/sweep/sweep.cpp)
 add_3d_operator(orbit_camera  operators/control/orbit_camera/orbit_camera.cpp)
 
 # --- Manifold (CSG Boolean library) ---
@@ -155,7 +158,7 @@ add_custom_target(operators DEPENDS
     grid sphere box point_cloud instanced_render
     render_3d shape3d transform3d scene_merge light3d mesh_import
     deformer instancer3d particles3d sdf3d material3d ssao3d dof3d
-    environment3d boolean3d orbit_camera)
+    environment3d boolean3d depth_mask3d mesh_builder sweep orbit_camera)
 
 # --- Tests ---
 if(VIVID_PACKAGE_BUILD_TESTS)
@@ -221,6 +224,9 @@ add_3d_test(test_instancer3d  tests/test_instancer3d.cpp  DEPENDS shape3d instan
 add_3d_test(test_boolean3d    tests/test_boolean3d.cpp    DEPENDS shape3d boolean3d render_3d)
 add_3d_test(test_particles3d  tests/test_particles3d.cpp  DEPENDS particles3d render_3d)
 add_3d_test(test_sdf3d        tests/test_sdf3d.cpp        DEPENDS sdf3d render_3d shape3d scene_merge)
+add_3d_test(test_depth_mask3d tests/test_depth_mask3d.cpp DEPENDS depth_mask3d shape3d render_3d transform3d scene_merge)
+add_3d_test(test_mesh_builder tests/test_mesh_builder.cpp DEPENDS mesh_builder render_3d)
+add_3d_test(test_sweep        tests/test_sweep.cpp        DEPENDS sweep render_3d)
 
 # Copy test data
 configure_file(tests/data/tetrahedron.obj ${CMAKE_BINARY_DIR}/tests/data/tetrahedron.obj COPYONLY)
