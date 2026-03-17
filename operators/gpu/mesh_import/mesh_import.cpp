@@ -779,7 +779,18 @@ private:
     }
 };
 
+static const char* kMeshImportDropExtensions[] = {".glb", ".gltf", ".obj"};
+static const VividFileDropHandlerDescriptor kMeshImportFileDrops[] = {{
+    "Import 3D Mesh",
+    kMeshImportDropExtensions,
+    3,
+    "file",
+    100,
+    "Create a MeshImport node from a dropped 3D model."
+}};
+
 VIVID_REGISTER(MeshImport)
 VIVID_THUMBNAIL(MeshImport)
+VIVID_FILE_DROP(kMeshImportFileDrops)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)
