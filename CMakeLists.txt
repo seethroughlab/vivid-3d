@@ -174,15 +174,15 @@ set(VIVID_RUNTIME_SOURCES
     ${VIVID_SRC_DIR}/src/runtime/scheduler.cpp
 )
 
-# Find yyjson in the vivid build tree
-set(YYJSON_INCLUDE_DIR "${VIVID_SRC_DIR}/deps/yyjson")
-find_library(YYJSON_LIB yyjson PATHS "${VIVID_BUILD_DIR}" NO_DEFAULT_PATH)
-if(NOT YYJSON_LIB)
-    # Build yyjson from vivid source
-    add_library(yyjson STATIC ${VIVID_SRC_DIR}/deps/yyjson/yyjson.c)
-    target_include_directories(yyjson PUBLIC ${YYJSON_INCLUDE_DIR})
-    set(YYJSON_LIB yyjson)
-endif()
+# nlohmann/json (header-only, matches vivid core)
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
 
 # Helper for 3D test executables
 function(add_3d_test name source)
@@ -191,9 +191,8 @@ function(add_3d_test name source)
     target_include_directories(${name} PRIVATE
         ${VIVID_SRC_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
-        ${YYJSON_INCLUDE_DIR}
         ${ARG_EXTRA_INCLUDES})
-    target_link_libraries(${name} PRIVATE vivid_operator_api ${YYJSON_LIB} webgpu)
+    target_link_libraries(${name} PRIVATE vivid_operator_api nlohmann_json::nlohmann_json webgpu)
     if(ARG_DEPENDS)
         add_dependencies(${name} ${ARG_DEPENDS})
     endif()
