@@ -1215,7 +1215,7 @@ static void collect_fragments(const vivid::gpu::VividSceneFragment* node,
 // Render3D Operator
 // =============================================================================
 
-struct Render3D : vivid::GpuOperatorBase {
+struct Render3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Render3D";
     static constexpr bool kTimeDependent = false;
 

@@ -6,7 +6,7 @@
 // Light3D — light source as a scene element
 // =============================================================================
 
-struct Light3D : vivid::GpuOperatorBase {
+struct Light3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Light3D";
     static constexpr bool kTimeDependent = false;
 

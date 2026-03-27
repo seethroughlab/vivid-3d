@@ -7,7 +7,7 @@
 // Material3D — PBR material wrapper (scene-in + 4 texture inputs → scene-out)
 // =============================================================================
 
-struct Material3D : vivid::GpuOperatorBase {
+struct Material3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Material3D";
     static constexpr bool kTimeDependent = false;
 

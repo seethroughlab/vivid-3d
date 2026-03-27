@@ -10,7 +10,7 @@
 // Instancer3D Operator — renders one mesh N times with per-instance transforms
 // =============================================================================
 
-struct Instancer3D : vivid::GpuOperatorBase {
+struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Instancer3D";
     static constexpr bool kTimeDependent = false;
 

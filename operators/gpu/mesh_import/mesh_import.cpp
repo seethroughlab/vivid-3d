@@ -21,7 +21,7 @@
 // MeshImport Operator — loads OBJ and glTF/GLB files with PBR materials
 // =============================================================================
 
-struct MeshImport : vivid::GpuOperatorBase {
+struct MeshImport : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "MeshImport";
     static constexpr bool kTimeDependent = false;
 

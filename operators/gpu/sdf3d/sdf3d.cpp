@@ -343,7 +343,7 @@ fn fs_main(in: SDFVertexOutput) -> SDFFragOutput {
 
 static constexpr float kTAU = 6.28318530717958647692f;
 
-struct SDF3D : vivid::GpuOperatorBase {
+struct SDF3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SDF3D";
     static constexpr bool kTimeDependent = false;
 

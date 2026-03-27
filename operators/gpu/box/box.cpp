@@ -18,7 +18,7 @@
 // Lazy-rebuilds when width/height/depth params change.
 // =============================================================================
 
-struct Box : vivid::GpuOperatorBase {
+struct Box : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Box";
     static constexpr bool kTimeDependent = false;
 

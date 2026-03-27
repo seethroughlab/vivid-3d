@@ -70,7 +70,7 @@ struct InstancedRenderUniforms {
 // InstancedRender Operator
 // =============================================================================
 
-struct InstancedRender : vivid::GpuOperatorBase {
+struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "InstancedRender";
     static constexpr bool kTimeDependent = false;
 

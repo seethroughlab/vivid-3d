@@ -410,7 +410,7 @@ static constexpr uint32_t kBrdfLutSize = 256;
 static constexpr WGPUTextureFormat kHdrFormat = WGPUTextureFormat_RGBA16Float;
 static constexpr WGPUTextureFormat kBrdfFormat = WGPUTextureFormat_RG16Float;
 
-struct Environment3D : vivid::GpuOperatorBase {
+struct Environment3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Environment3D";
     static constexpr bool kTimeDependent = false;
 

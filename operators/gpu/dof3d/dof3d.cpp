@@ -223,7 +223,7 @@ struct DoFUniforms {
 // DepthOfField3D Operator
 // =============================================================================
 
-struct DepthOfField3D : vivid::GpuOperatorBase {
+struct DepthOfField3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "DepthOfField3D";
     static constexpr bool kTimeDependent = false;
 

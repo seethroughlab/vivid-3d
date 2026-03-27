@@ -118,7 +118,7 @@ float simplex3d(float x, float y, float z) {
 // Deformer Operator — CPU vertex displacement
 // =============================================================================
 
-struct Deformer : vivid::GpuOperatorBase {
+struct Deformer : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Deformer";
     static constexpr bool kTimeDependent = true;
 
@@ -144,7 +144,7 @@ struct Deformer : vivid::GpuOperatorBase {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));
-        out.push_back({"amount", VIVID_PORT_FLOAT, VIVID_PORT_INPUT});
+        out.push_back({"amount", VIVID_PORT_SIGNAL, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 

@@ -8,7 +8,7 @@
 // Transform3D — scene-in, scene-out with TRS transform
 // =============================================================================
 
-struct Transform3D : vivid::GpuOperatorBase {
+struct Transform3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Transform3D";
     static constexpr bool kTimeDependent = false;
 

@@ -18,7 +18,7 @@
 // Rebuilds vertex buffer when point count changes; uploads spread data each tick.
 // =============================================================================
 
-struct PointCloud : vivid::GpuOperatorBase {
+struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "PointCloud";
     static constexpr bool kTimeDependent = false;
 

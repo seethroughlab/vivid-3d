@@ -139,7 +139,7 @@ static manifold::MeshGL build_meshgl(const VividSceneFragment* frag) {
 // Boolean3D Operator
 // =============================================================================
 
-struct Boolean3D : vivid::GpuOperatorBase {
+struct Boolean3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Boolean3D";
     static constexpr bool kTimeDependent = false;
 

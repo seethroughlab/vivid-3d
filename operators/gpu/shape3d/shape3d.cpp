@@ -609,7 +609,7 @@ static void generate_pyramid(std::vector<vivid::gpu::Vertex3D>& verts,
 // Shape3D Operator
 // =============================================================================
 
-struct Shape3D : vivid::GpuOperatorBase {
+struct Shape3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Shape3D";
     static constexpr bool kTimeDependent = false;
 

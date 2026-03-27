@@ -19,7 +19,7 @@
 // Lazy-rebuilds when lat_segments / lon_segments params change.
 // =============================================================================
 
-struct Sphere : vivid::GpuOperatorBase {
+struct Sphere : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Sphere";
     static constexpr bool kTimeDependent = false;
 

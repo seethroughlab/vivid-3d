@@ -155,7 +155,7 @@ static int get_profile_seg_count(int profile_type, int profile_segments) {
 // Sweep Operator
 // =============================================================================
 
-struct Sweep : vivid::GpuOperatorBase {
+struct Sweep : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Sweep";
     static constexpr bool kTimeDependent = false;
 

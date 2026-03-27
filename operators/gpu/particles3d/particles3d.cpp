@@ -315,7 +315,7 @@ static_assert(sizeof(ParamsData) == 96, "ParamsData must be 96 bytes");
 // Particles3D Operator
 // =============================================================================
 
-struct Particles3D : vivid::GpuOperatorBase {
+struct Particles3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Particles3D";
     static constexpr bool kTimeDependent = true;
 

@@ -17,7 +17,7 @@
 // Lazy-rebuilds buffers when cols/rows params change.
 // =============================================================================
 
-struct Grid : vivid::GpuOperatorBase {
+struct Grid : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Grid";
     static constexpr bool kTimeDependent = false;
 

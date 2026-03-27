@@ -84,7 +84,7 @@ struct DepthMaskUniforms {
 // DepthMask3D Operator
 // =============================================================================
 
-struct DepthMask3D : vivid::GpuOperatorBase {
+struct DepthMask3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "DepthMask3D";
     static constexpr bool kTimeDependent = false;
 

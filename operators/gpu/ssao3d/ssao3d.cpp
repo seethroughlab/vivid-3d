@@ -230,7 +230,7 @@ struct SSAOUniforms {
 // SSAO3D Operator
 // =============================================================================
 
-struct SSAO3D : vivid::GpuOperatorBase {
+struct SSAO3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SSAO3D";
     static constexpr bool kTimeDependent = false;
 

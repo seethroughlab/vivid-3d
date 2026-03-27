@@ -2,7 +2,7 @@
 #include "operator_api/input_state.h"
 #include <cmath>
 
-struct OrbitCamera : vivid::ControlOperatorBase {
+struct OrbitCamera : vivid::OperatorBase, vivid::FrameProcessable {
     static constexpr const char* kName   = "OrbitCamera";
     static constexpr bool kTimeDependent = true;
 
@@ -59,15 +59,15 @@ struct OrbitCamera : vivid::ControlOperatorBase {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"cam_x",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"cam_y",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"cam_z",    VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_x", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_y", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
-        out.push_back({"target_z", VIVID_PORT_FLOAT, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_x",    VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_y",    VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
+        out.push_back({"cam_z",    VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
+        out.push_back({"target_x", VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
+        out.push_back({"target_y", VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
+        out.push_back({"target_z", VIVID_PORT_SIGNAL, VIVID_PORT_OUTPUT});
     }
 
-    void write_outputs(const VividProcessContext* ctx) {
+    void write_outputs(const VividFrameContext* ctx) {
         float azim = azimuth_rad_;
         float elev = elevation_rad_;
         float ce = cosf(elev);
@@ -83,7 +83,7 @@ struct OrbitCamera : vivid::ControlOperatorBase {
         ctx->output_values[5] = tgt_[2];
     }
 
-    void process(const VividProcessContext* ctx) override {
+    void process_frame(const VividFrameContext* ctx) override {
         static constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
         static constexpr float kMaxElev  = 89.0f * kDegToRad;
 

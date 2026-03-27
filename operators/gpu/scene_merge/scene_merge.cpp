@@ -6,7 +6,7 @@
 // SceneMerge — N scene inputs → 1 combined scene output
 // =============================================================================
 
-struct SceneMerge : vivid::GpuOperatorBase {
+struct SceneMerge : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SceneMerge";
     static constexpr bool kTimeDependent = false;
 

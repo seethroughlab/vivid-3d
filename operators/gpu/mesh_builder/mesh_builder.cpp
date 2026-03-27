@@ -11,7 +11,7 @@
 // MeshBuilder — parametric primitive generator (scene fragment output)
 // =============================================================================
 
-struct MeshBuilder : vivid::GpuOperatorBase {
+struct MeshBuilder : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "MeshBuilder";
     static constexpr bool kTimeDependent = false;
 
