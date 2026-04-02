@@ -84,6 +84,17 @@ struct DepthMaskUniforms {
 // DepthMask3D Operator
 // =============================================================================
 
+/**
+ * @brief Builds a mask from scene depth for compositing and selective post-processing.
+ *
+ * DepthMask3D turns the incoming depth buffer into a soft near, far, or range mask that can be
+ * used for fog, blending, and layered image treatment.
+ *
+ * @param threshold Depth threshold for the mask.
+ * @param softness Feathering around the threshold.
+ * @param mode Mask mode: near, far, or range.
+ * @param invert Inverts the final mask output.
+ */
 struct DepthMask3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "DepthMask3D";
     static constexpr bool kTimeDependent = false;

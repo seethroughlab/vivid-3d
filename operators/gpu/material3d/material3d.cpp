@@ -7,6 +7,18 @@
 // Material3D — PBR material wrapper (scene-in + 4 texture inputs → scene-out)
 // =============================================================================
 
+/**
+ * @brief Applies surface shading parameters to incoming 3D geometry.
+ *
+ * Material3D centralizes base color, metallic, roughness, emission, and toon controls so look
+ * development can stay separate from geometry generation.
+ *
+ * @param color_r Red channel of the base color.
+ * @param roughness Surface roughness.
+ * @param metallic Metallic response.
+ * @param emission Self-illumination amount.
+ * @param toon_levels Number of toon-shading steps.
+ */
 struct Material3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Material3D";
     static constexpr bool kTimeDependent = false;

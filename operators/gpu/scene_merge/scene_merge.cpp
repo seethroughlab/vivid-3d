@@ -6,6 +6,12 @@
 // SceneMerge — N scene inputs → 1 combined scene output
 // =============================================================================
 
+/**
+ * @brief Merges multiple 3D scene inputs into a single scene stream.
+ *
+ * SceneMerge is a structural utility for combining geometry, lights, and scene fragments before
+ * they are passed into Render3D or downstream post-processing operators.
+ */
 struct SceneMerge : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SceneMerge";
     static constexpr bool kTimeDependent = false;

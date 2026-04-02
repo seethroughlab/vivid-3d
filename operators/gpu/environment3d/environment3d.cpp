@@ -410,6 +410,15 @@ static constexpr uint32_t kBrdfLutSize = 256;
 static constexpr WGPUTextureFormat kHdrFormat = WGPUTextureFormat_RGBA16Float;
 static constexpr WGPUTextureFormat kBrdfFormat = WGPUTextureFormat_RG16Float;
 
+/**
+ * @brief Adds environment lighting and rotation controls to a 3D scene.
+ *
+ * Environment3D is used for image-based lighting and sky-style contribution so the renderer can
+ * respond to a broader ambient environment instead of only direct lights.
+ *
+ * @param intensity Environment lighting intensity.
+ * @param rotation_y Rotation of the environment around the Y axis.
+ */
 struct Environment3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Environment3D";
     static constexpr bool kTimeDependent = false;

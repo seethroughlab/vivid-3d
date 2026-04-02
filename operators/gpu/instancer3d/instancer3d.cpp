@@ -10,6 +10,17 @@
 // Instancer3D Operator — renders one mesh N times with per-instance transforms
 // =============================================================================
 
+/**
+ * @brief Generates instance transforms for repeated 3D layouts.
+ *
+ * Instancer3D creates patterned placements such as grids, circles, lines, and 3D lattices, then
+ * hands those transforms to downstream instanced rendering operators.
+ *
+ * @param count Number of instances to generate.
+ * @param layout Placement pattern.
+ * @param spacing Distance between generated instances.
+ * @param palette Built-in color palette for generated instances.
+ */
 struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Instancer3D";
     static constexpr bool kTimeDependent = false;

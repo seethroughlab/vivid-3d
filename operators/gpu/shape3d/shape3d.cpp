@@ -609,6 +609,19 @@ static void generate_pyramid(std::vector<vivid::gpu::Vertex3D>& verts,
 // Shape3D Operator
 // =============================================================================
 
+/**
+ * @brief Generates a procedural 3D primitive with material and transform controls.
+ *
+ * Shape3D is an all-purpose source operator for common meshes like cubes, spheres, toruses, and
+ * planes, with built-in color, shading, and transform parameters.
+ *
+ * @param shape Primitive shape to generate.
+ * @param detail Mesh detail or subdivision level.
+ * @param roughness Surface roughness for lighting.
+ * @param metallic Metallic response for shading.
+ * @param pos_x Position along the X axis.
+ * @param scale_x Scale along the X axis.
+ */
 struct Shape3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Shape3D";
     static constexpr bool kTimeDependent = false;

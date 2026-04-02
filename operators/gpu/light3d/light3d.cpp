@@ -6,6 +6,19 @@
 // Light3D — light source as a scene element
 // =============================================================================
 
+/**
+ * @brief Defines a configurable 3D light source for the scene pipeline.
+ *
+ * Light3D creates directional, point, or spot lights with adjustable color, placement, and
+ * intensity so scenes can be lit without embedding light logic inside geometry operators.
+ *
+ * @param type Light type: directional, point, or spot.
+ * @param intensity Overall light intensity.
+ * @param radius Influence radius for local lights.
+ * @param pos_x Light position along the X axis.
+ * @param dir_y Y component of the light direction.
+ * @param spot_angle Cone angle for spot lights.
+ */
 struct Light3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Light3D";
     static constexpr bool kTimeDependent = false;

@@ -139,6 +139,15 @@ static manifold::MeshGL build_meshgl(const VividSceneFragment* frag) {
 // Boolean3D Operator
 // =============================================================================
 
+/**
+ * @brief Combines two 3D meshes with boolean-style scene operations.
+ *
+ * Boolean3D merges geometry streams using union, subtraction, or intersection semantics and can
+ * optionally smooth the transition angle between surfaces.
+ *
+ * @param operation Boolean operation to apply.
+ * @param smooth_angle Smoothing angle used when blending the boolean result.
+ */
 struct Boolean3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Boolean3D";
     static constexpr bool kTimeDependent = false;

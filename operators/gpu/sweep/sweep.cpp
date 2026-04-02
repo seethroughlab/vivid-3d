@@ -155,6 +155,18 @@ static int get_profile_seg_count(int profile_type, int profile_segments) {
 // Sweep Operator
 // =============================================================================
 
+/**
+ * @brief Sweeps a profile shape along a path to generate procedural 3D geometry.
+ *
+ * Sweep builds tubes, ribbons, and extrusions by combining a configurable path with a profile,
+ * then exposing material controls for immediate rendering.
+ *
+ * @param path_type Path used for the sweep.
+ * @param path_height Height of the generated path.
+ * @param profile_type Cross-section used along the sweep.
+ * @param twist Twist applied over the sweep length.
+ * @param caps Enables end caps on the generated mesh.
+ */
 struct Sweep : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Sweep";
     static constexpr bool kTimeDependent = false;

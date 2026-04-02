@@ -17,6 +17,15 @@
 // Lazy-rebuilds buffers when cols/rows params change.
 // =============================================================================
 
+/**
+ * @brief Generates a reusable 3D grid mesh.
+ *
+ * Grid emits a simple subdivided plane-style mesh that can be fed into the rest of the 3D
+ * pipeline for floors, guides, or procedural layouts.
+ *
+ * @param cols Number of grid columns.
+ * @param rows Number of grid rows.
+ */
 struct Grid : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Grid";
     static constexpr bool kTimeDependent = false;

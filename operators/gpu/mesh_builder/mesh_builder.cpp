@@ -11,6 +11,18 @@
 // MeshBuilder — parametric primitive generator (scene fragment output)
 // =============================================================================
 
+/**
+ * @brief Builds common procedural meshes with integrated material settings.
+ *
+ * MeshBuilder is a compact geometry source for quickly generating boxes, spheres, cylinders,
+ * cones, toruses, and planes without leaving the graph.
+ *
+ * @param primitive Primitive type to generate.
+ * @param size_x Size along the X axis.
+ * @param segments Tessellation level for supported primitives.
+ * @param inner_radius Inner radius used by torus-like shapes.
+ * @param roughness Surface roughness for the generated mesh.
+ */
 struct MeshBuilder : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "MeshBuilder";
     static constexpr bool kTimeDependent = false;

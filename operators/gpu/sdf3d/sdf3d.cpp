@@ -343,6 +343,19 @@ fn fs_main(in: SDFVertexOutput) -> SDFFragOutput {
 
 static constexpr float kTAU = 6.28318530717958647692f;
 
+/**
+ * @brief Raymarches signed-distance 3D shapes into a rendered scene texture.
+ *
+ * SDF3D builds procedural forms from primary and secondary SDF shapes, supports smooth boolean
+ * operations, and exposes material plus transform controls in one operator.
+ *
+ * @param shape Primary SDF primitive.
+ * @param operation Optional boolean operation with the secondary shape.
+ * @param shape_b Secondary SDF primitive.
+ * @param smooth_k Blend amount for smooth boolean operations.
+ * @param max_steps Raymarch step budget.
+ * @param threshold Hit threshold for the distance field.
+ */
 struct SDF3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SDF3D";
     static constexpr bool kTimeDependent = false;

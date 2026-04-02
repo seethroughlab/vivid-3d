@@ -21,6 +21,18 @@
 // MeshImport Operator — loads OBJ and glTF/GLB files with PBR materials
 // =============================================================================
 
+/**
+ * @brief Loads an external mesh file into the 3D scene pipeline.
+ *
+ * MeshImport brings authored geometry into vivid-3d and exposes basic material tinting plus
+ * transform controls so imported assets can be staged without extra helper operators.
+ *
+ * @param file Mesh file to import.
+ * @param r Red channel of the import tint.
+ * @param pos_x Position offset along the X axis.
+ * @param rot_y Rotation around the Y axis.
+ * @param scale_x Scale along the X axis.
+ */
 struct MeshImport : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "MeshImport";
     static constexpr bool kTimeDependent = false;

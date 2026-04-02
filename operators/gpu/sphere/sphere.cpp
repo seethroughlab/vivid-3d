@@ -19,6 +19,15 @@
 // Lazy-rebuilds when lat_segments / lon_segments params change.
 // =============================================================================
 
+/**
+ * @brief Generates a sphere mesh with configurable tessellation.
+ *
+ * Sphere provides a lightweight procedural primitive for the 3D pipeline, suitable for lighting,
+ * instancing, and material experiments.
+ *
+ * @param lat_segments Number of latitude segments.
+ * @param lon_segments Number of longitude segments.
+ */
 struct Sphere : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Sphere";
     static constexpr bool kTimeDependent = false;

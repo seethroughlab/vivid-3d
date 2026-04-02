@@ -70,6 +70,14 @@ struct InstancedRenderUniforms {
 // InstancedRender Operator
 // =============================================================================
 
+/**
+ * @brief Renders many copies of a mesh using per-instance transforms.
+ *
+ * InstancedRender draws geometry supplied by upstream 3D operators while applying per-instance
+ * placement, making it useful for dense scenes and repeated motifs.
+ *
+ * @param scale Global scale applied to each rendered instance.
+ */
 struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "InstancedRender";
     static constexpr bool kTimeDependent = false;

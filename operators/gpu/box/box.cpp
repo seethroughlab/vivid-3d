@@ -18,6 +18,16 @@
 // Lazy-rebuilds when width/height/depth params change.
 // =============================================================================
 
+/**
+ * @brief Generates a box mesh with independent dimensions.
+ *
+ * Box is a procedural cuboid primitive that can be resized per axis before being passed into
+ * materials, transforms, and render operators.
+ *
+ * @param width Size along the X axis.
+ * @param height Size along the Y axis.
+ * @param depth Size along the Z axis.
+ */
 struct Box : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Box";
     static constexpr bool kTimeDependent = false;

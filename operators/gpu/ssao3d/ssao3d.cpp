@@ -230,6 +230,18 @@ struct SSAOUniforms {
 // SSAO3D Operator
 // =============================================================================
 
+/**
+ * @brief Adds screen-space ambient occlusion to a rendered 3D scene.
+ *
+ * SSAO3D darkens creases and contact regions using the scene depth buffer, helping final renders
+ * feel more grounded without changing the underlying geometry.
+ *
+ * @param radius Occlusion sampling radius.
+ * @param intensity Strength of the occlusion effect.
+ * @param bias Bias used to avoid self-occlusion artifacts.
+ * @param near_plane Near clip value used when decoding depth.
+ * @param far_plane Far clip value used when decoding depth.
+ */
 struct SSAO3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "SSAO3D";
     static constexpr bool kTimeDependent = false;

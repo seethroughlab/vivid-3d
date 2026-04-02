@@ -315,6 +315,19 @@ static_assert(sizeof(ParamsData) == 96, "ParamsData must be 96 bytes");
 // Particles3D Operator
 // =============================================================================
 
+/**
+ * @brief Simulates and renders a configurable 3D particle system.
+ *
+ * Particles3D combines spawning, motion, curl noise, and simple shading controls to produce a
+ * self-contained GPU particle field for atmospheric scenes and reactive effects.
+ *
+ * @param count Maximum live particle count.
+ * @param emission_rate Rate at which new particles are emitted.
+ * @param lifetime Lifetime of each particle.
+ * @param speed Base particle speed.
+ * @param gravity Vertical acceleration applied to particles.
+ * @param learning_mode Chooses between advanced and beginner compute paths.
+ */
 struct Particles3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Particles3D";
     static constexpr bool kTimeDependent = true;

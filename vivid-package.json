@@ -5,7 +5,11 @@
   "description": "3D rendering operators for Vivid",
   "author": "seethroughlab",
   "category": "gpu",
-  "tags": ["gpu", "3d", "rendering"],
+  "tags": [
+    "gpu",
+    "3d",
+    "rendering"
+  ],
   "build": "cmake",
   "gpu_operators": [
     "gpu/grid",
@@ -35,8 +39,14 @@
   "operators": [],
   "dependencies": {
     "vendor": [
-      { "name": "cgltf", "include": "deps/cgltf" },
-      { "name": "tinyobjloader", "include": "deps/tinyobjloader" }
+      {
+        "name": "cgltf",
+        "include": "deps/cgltf"
+      },
+      {
+        "name": "tinyobjloader",
+        "include": "deps/tinyobjloader"
+      }
     ]
   },
   "tests": {
@@ -47,5 +57,9 @@
       "graphs/3d_particles_demo.json"
     ],
     "cpp": []
+  },
+  "site_docs": {
+    "overview": "README.md",
+    "preview_image": "docs/images/preview.png"
   }
 }

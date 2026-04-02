@@ -18,6 +18,17 @@
 // Rebuilds vertex buffer when point count changes; uploads spread data each tick.
 // =============================================================================
 
+/**
+ * @brief Renders incoming 3D points as a shaded point cloud.
+ *
+ * PointCloud turns position data into a simple GPU point primitive, useful for raw scans,
+ * particle visualizations, and lightweight spatial debugging.
+ *
+ * @param point_size Size of each rendered point.
+ * @param r Red channel of the default point color.
+ * @param g Green channel of the default point color.
+ * @param b Blue channel of the default point color.
+ */
 struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "PointCloud";
     static constexpr bool kTimeDependent = false;

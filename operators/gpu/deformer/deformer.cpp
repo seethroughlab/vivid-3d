@@ -118,6 +118,18 @@ float simplex3d(float x, float y, float z) {
 // Deformer Operator — CPU vertex displacement
 // =============================================================================
 
+/**
+ * @brief Deforms incoming 3D geometry with procedural or audio-driven motion.
+ *
+ * Deformer offsets mesh vertices using noise, sine motion, or external modulation so shapes can
+ * feel animated and reactive without rewriting the source mesh.
+ *
+ * @param mode Deformation mode.
+ * @param amplitude Amount of geometric displacement.
+ * @param frequency Spatial deformation frequency.
+ * @param speed Animation speed for time-varying deformation.
+ * @param axis Axis selection for the deformation.
+ */
 struct Deformer : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Deformer";
     static constexpr bool kTimeDependent = true;

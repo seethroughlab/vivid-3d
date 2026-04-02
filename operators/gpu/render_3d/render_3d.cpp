@@ -1215,6 +1215,19 @@ static void collect_fragments(const vivid::gpu::VividSceneFragment* node,
 // Render3D Operator
 // =============================================================================
 
+/**
+ * @brief Renders a composed 3D scene into a texture with camera, lighting, and post controls.
+ *
+ * Render3D is the main scene renderer for vivid-3d. It consumes scene data, applies camera and
+ * environment settings, and produces the final 3D image plus depth-aware effects like fog.
+ *
+ * @param cam_x Camera X position.
+ * @param cam_y Camera Y position.
+ * @param cam_z Camera Z position.
+ * @param fov Camera field of view.
+ * @param shadow_enabled Enables shadow rendering.
+ * @param fog_enabled Enables fog in the final scene render.
+ */
 struct Render3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Render3D";
     static constexpr bool kTimeDependent = false;

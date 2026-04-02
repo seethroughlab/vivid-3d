@@ -8,6 +8,17 @@
 // Transform3D — scene-in, scene-out with TRS transform
 // =============================================================================
 
+/**
+ * @brief Applies translation, rotation, and scale to incoming 3D geometry.
+ *
+ * Transform3D is the main spatial utility for repositioning meshes or scenes before rendering.
+ *
+ * @param pos_x Position offset along the X axis.
+ * @param pos_y Position offset along the Y axis.
+ * @param pos_z Position offset along the Z axis.
+ * @param rot_y Rotation around the Y axis.
+ * @param scale_x Scale along the X axis.
+ */
 struct Transform3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Transform3D";
     static constexpr bool kTimeDependent = false;

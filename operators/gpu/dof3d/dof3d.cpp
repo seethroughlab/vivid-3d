@@ -223,6 +223,18 @@ struct DoFUniforms {
 // DepthOfField3D Operator
 // =============================================================================
 
+/**
+ * @brief Applies depth-of-field blur to a rendered 3D scene.
+ *
+ * DepthOfField3D uses the scene depth buffer to blur out-of-focus regions, giving the 3D render
+ * a stronger sense of lensing and depth.
+ *
+ * @param focus_distance Distance that stays in focus.
+ * @param aperture Strength of the blur around the focus plane.
+ * @param max_blur Maximum blur radius.
+ * @param near_plane Near clip used when decoding depth.
+ * @param far_plane Far clip used when decoding depth.
+ */
 struct DepthOfField3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "DepthOfField3D";
     static constexpr bool kTimeDependent = false;
