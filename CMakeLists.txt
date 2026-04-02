@@ -164,14 +164,15 @@ add_custom_target(operators DEPENDS
 if(VIVID_PACKAGE_BUILD_TESTS)
 enable_testing()
 
-# Locate vivid runtime sources needed for scheduler-based tests
+# Locate vivid runtime sources needed for tests
 set(VIVID_RUNTIME_SOURCES
     ${VIVID_SRC_DIR}/src/runtime/operator_loader.cpp
     ${VIVID_SRC_DIR}/src/runtime/operator_registry.cpp
     ${VIVID_SRC_DIR}/src/runtime/port_type_registry.cpp
     ${VIVID_SRC_DIR}/src/runtime/wgsl_header_parser.cpp
     ${VIVID_SRC_DIR}/src/runtime/graph.cpp
-    ${VIVID_SRC_DIR}/src/runtime/scheduler.cpp
+    ${VIVID_SRC_DIR}/src/runtime/graph_compiler.cpp
+    ${VIVID_SRC_DIR}/src/runtime/frame_executor.cpp
 )
 
 # nlohmann/json (header-only, matches vivid core)
