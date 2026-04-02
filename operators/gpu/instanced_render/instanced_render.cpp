@@ -15,7 +15,7 @@
 // Input ports:
 //   "mesh"       VIVID_CUSTOM_PORT     (required) — geometry to draw
 //   "transforms" VIVID_CUSTOM_PORT  (optional) — per-instance vec4 transforms
-//   "positions"  VIVID_PORT_SPREAD (fallback) — [x0,y0, x1,y1, ...] pairs
+//   "positions"  VIVID_PORT_LANE_ARRAY (fallback) — [x0,y0, x1,y1, ...] pairs
 //
 // Output: "texture" VIVID_PORT_TEXTURE
 //
@@ -91,7 +91,7 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(VIVID_CUSTOM_REF_PORT("mesh",       VIVID_PORT_INPUT, VividMesh));
         out.push_back(VIVID_CUSTOM_REF_PORT("transforms", VIVID_PORT_INPUT, VividComputeBuffer));
-        out.push_back({"positions",  VIVID_PORT_SPREAD, VIVID_PORT_INPUT});
+        out.push_back({"positions",  VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});
         out.push_back({"texture",    VIVID_PORT_TEXTURE,    VIVID_PORT_OUTPUT});
     }
 
@@ -128,14 +128,14 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
             transform_buf_size = cb->size_bytes;
             instance_count     = cb->element_count;
         } else {
-            // Positions spread fallback: [x0,y0, x1,y1, ...]
-            uint32_t    spread_len  = 0;
-            const float* spread_data = nullptr;
-            if (ctx->input_spreads && ctx->input_spreads[2].length > 0) {
-                spread_len  = ctx->input_spreads[2].length;
-                spread_data = ctx->input_spreads[2].data;
+            // Positions lane fallback: [x0,y0, x1,y1, ...]
+            uint32_t    lane_len  = 0;
+            const float* lane_data = nullptr;
+            if (ctx->input_lanes && ctx->input_lanes[2].length > 0) {
+                lane_len  = ctx->input_lanes[2].length;
+                lane_data = ctx->input_lanes[2].data;
             }
-            instance_count = spread_len / 2;
+            instance_count = lane_len / 2;
             if (instance_count == 0) instance_count = 1;  // one instance at origin
 
             // Rebuild local storage buffer when count changes
@@ -143,13 +143,13 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
                 rebuild_storage(ctx, instance_count);
             }
 
-            // Upload vec4 translations from positions spread
+            // Upload vec4 translations from positions lane
             if (storage_buf_ && instance_count > 0) {
                 std::vector<float> transforms(instance_count * 4, 0.0f);
                 for (uint32_t i = 0; i < instance_count; ++i) {
-                    if (spread_data && (i * 2 + 1) < spread_len) {
-                        transforms[i * 4 + 0] = spread_data[i * 2 + 0];  // x
-                        transforms[i * 4 + 1] = spread_data[i * 2 + 1];  // y
+                    if (lane_data && (i * 2 + 1) < lane_len) {
+                        transforms[i * 4 + 0] = lane_data[i * 2 + 0];  // x
+                        transforms[i * 4 + 1] = lane_data[i * 2 + 1];  // y
                     }
                     // z and w remain 0
                 }

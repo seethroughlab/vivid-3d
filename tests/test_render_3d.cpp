@@ -303,7 +303,7 @@ int main() {
               "VividSceneFragment <-> VividSceneFragment compatible");
         check(port_type_compatible(scene_tid, VIVID_PORT_TEXTURE) == false,
               "VividSceneFragment <-> TEXTURE incompatible");
-        check(port_type_compatible(scene_tid, VIVID_PORT_SIGNAL) == false,
+        check(port_type_compatible(scene_tid, VIVID_PORT_SCALAR) == false,
               "VividSceneFragment <-> FLOAT incompatible");
         check(port_type_compatible(scene_tid, VIVID_PORT_AUDIO) == false,
               "VividSceneFragment <-> AUDIO incompatible");

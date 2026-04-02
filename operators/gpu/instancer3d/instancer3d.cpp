@@ -44,13 +44,13 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));              // 0
-        out.push_back({"positions", VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 1
-        out.push_back({"scales",    VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 2
-        out.push_back({"colors",    VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 3
-        out.push_back({"scale_x",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 4
-        out.push_back({"scale_y",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 5
-        out.push_back({"scale_z",   VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 6
-        out.push_back({"rotations", VIVID_PORT_SPREAD,  VIVID_PORT_INPUT});   // 7
+        out.push_back({"positions", VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 1
+        out.push_back({"scales",    VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 2
+        out.push_back({"colors",    VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 3
+        out.push_back({"scale_x",   VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 4
+        out.push_back({"scale_y",   VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 5
+        out.push_back({"scale_z",   VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 6
+        out.push_back({"rotations", VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 7
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
@@ -61,7 +61,7 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->vertex_buffer || input->index_count == 0) return;
 
-        // Read spreads (input port indices: scene=0, positions=1, scales=2, colors=3,
+        // Read lanes (input port indices: scene=0, positions=1, scales=2, colors=3,
         //   scale_x=4, scale_y=5, scale_z=6, rotations=7)
         const float* pos_data = nullptr;
         uint32_t pos_len = 0;
@@ -78,38 +78,38 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
         const float* rot_data = nullptr;
         uint32_t rot_len = 0;
 
-        if (ctx->input_spreads) {
-            if (ctx->input_spreads[1].length > 0) {
-                pos_data = ctx->input_spreads[1].data;
-                pos_len  = ctx->input_spreads[1].length;
+        if (ctx->input_lanes) {
+            if (ctx->input_lanes[1].length > 0) {
+                pos_data = ctx->input_lanes[1].data;
+                pos_len  = ctx->input_lanes[1].length;
             }
-            if (ctx->input_spreads[2].length > 0) {
-                scale_data = ctx->input_spreads[2].data;
-                scale_len  = ctx->input_spreads[2].length;
+            if (ctx->input_lanes[2].length > 0) {
+                scale_data = ctx->input_lanes[2].data;
+                scale_len  = ctx->input_lanes[2].length;
             }
-            if (ctx->input_spreads[3].length > 0) {
-                color_data = ctx->input_spreads[3].data;
-                color_len  = ctx->input_spreads[3].length;
+            if (ctx->input_lanes[3].length > 0) {
+                color_data = ctx->input_lanes[3].data;
+                color_len  = ctx->input_lanes[3].length;
             }
-            if (ctx->input_spreads[4].length > 0) {
-                sx_data = ctx->input_spreads[4].data;
-                sx_len  = ctx->input_spreads[4].length;
+            if (ctx->input_lanes[4].length > 0) {
+                sx_data = ctx->input_lanes[4].data;
+                sx_len  = ctx->input_lanes[4].length;
             }
-            if (ctx->input_spreads[5].length > 0) {
-                sy_data = ctx->input_spreads[5].data;
-                sy_len  = ctx->input_spreads[5].length;
+            if (ctx->input_lanes[5].length > 0) {
+                sy_data = ctx->input_lanes[5].data;
+                sy_len  = ctx->input_lanes[5].length;
             }
-            if (ctx->input_spreads[6].length > 0) {
-                sz_data = ctx->input_spreads[6].data;
-                sz_len  = ctx->input_spreads[6].length;
+            if (ctx->input_lanes[6].length > 0) {
+                sz_data = ctx->input_lanes[6].data;
+                sz_len  = ctx->input_lanes[6].length;
             }
-            if (ctx->input_spreads[7].length > 0) {
-                rot_data = ctx->input_spreads[7].data;
-                rot_len  = ctx->input_spreads[7].length;
+            if (ctx->input_lanes[7].length > 0) {
+                rot_data = ctx->input_lanes[7].data;
+                rot_len  = ctx->input_lanes[7].length;
             }
         }
 
-        // Determine instance count: from positions spread (3 floats per instance) or param
+        // Determine instance count: from positions lane (3 floats per instance) or param
         uint32_t n = static_cast<uint32_t>(count.int_value());
         if (pos_data && pos_len >= 3) {
             n = pos_len / 3;
@@ -201,7 +201,7 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
             instances_[i].rotation_y = use_rot ? rot_data[i % rot_len] : 0.0f;
         }
 
-        // Colors: custom spread > palette > input material color
+        // Colors: custom lane > palette > input material color
         bool use_custom_colors = (color_data && color_len >= n * 4);
         int pal = palette.int_value();
         for (uint32_t i = 0; i < n; ++i) {

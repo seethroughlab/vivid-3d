@@ -8,14 +8,14 @@
 #include <vector>
 
 // =============================================================================
-// PointCloud — interprets a CONTROL_SPREAD as [x0,y0, x1,y1, ...] pairs
+// PointCloud — interprets a LANE_ARRAY as [x0,y0, x1,y1, ...] pairs
 //              and produces a PointList mesh.
 //
-// Input:  "positions" (VIVID_PORT_SPREAD)
+// Input:  "positions" (VIVID_PORT_LANE_ARRAY)
 // Output: "mesh"      (VIVID_CUSTOM_PORT, topology PointList)
 //
 // Vertex layout: vec2f (xy) = 8 bytes per point.
-// Rebuilds vertex buffer when point count changes; uploads spread data each tick.
+// Rebuilds vertex buffer when point count changes; uploads lane data each tick.
 // =============================================================================
 
 /**
@@ -46,31 +46,31 @@ struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"positions", VIVID_PORT_SPREAD, VIVID_PORT_INPUT});
+        out.push_back({"positions", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});
         out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
         if (ctx->custom_output_count == 0) return;
 
-        // Read positions spread: pairs of [x,y]
-        uint32_t spread_len = 0;
-        const float* spread_data = nullptr;
-        if (ctx->input_spreads && ctx->input_spreads[0].length > 0) {
-            spread_len  = ctx->input_spreads[0].length;
-            spread_data = ctx->input_spreads[0].data;
+        // Read positions lane: pairs of [x,y]
+        uint32_t lane_len = 0;
+        const float* lane_data = nullptr;
+        if (ctx->input_lanes && ctx->input_lanes[0].length > 0) {
+            lane_len  = ctx->input_lanes[0].length;
+            lane_data = ctx->input_lanes[0].data;
         }
 
-        uint32_t point_count = spread_len / 2;
+        uint32_t point_count = lane_len / 2;
 
         if (point_count != built_count_) {
             rebuild(ctx, point_count);
         }
 
-        // Upload current spread data each tick
-        if (vertex_buf_ && spread_data && point_count > 0) {
+        // Upload current lane data each tick
+        if (vertex_buf_ && lane_data && point_count > 0) {
             wgpuQueueWriteBuffer(ctx->queue, vertex_buf_, 0,
-                                 spread_data, point_count * 2 * sizeof(float));
+                                 lane_data, point_count * 2 * sizeof(float));
         }
 
         ctx->custom_outputs[0] = &mesh_;
