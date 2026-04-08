@@ -166,13 +166,13 @@ enable_testing()
 
 # Locate vivid runtime sources needed for tests
 set(VIVID_RUNTIME_SOURCES
-    ${VIVID_SRC_DIR}/src/runtime/operator_loader.cpp
-    ${VIVID_SRC_DIR}/src/runtime/operator_registry.cpp
-    ${VIVID_SRC_DIR}/src/runtime/port_type_registry.cpp
-    ${VIVID_SRC_DIR}/src/runtime/wgsl_header_parser.cpp
-    ${VIVID_SRC_DIR}/src/runtime/graph.cpp
-    ${VIVID_SRC_DIR}/src/runtime/graph_compiler.cpp
-    ${VIVID_SRC_DIR}/src/runtime/frame_executor.cpp
+    ${VIVID_SRC_DIR}/src/runtime/operators/operator_loader.cpp
+    ${VIVID_SRC_DIR}/src/runtime/operators/operator_registry.cpp
+    ${VIVID_SRC_DIR}/src/runtime/graph/port_type_registry.cpp
+    ${VIVID_SRC_DIR}/src/runtime/gpu/wgsl_header_parser.cpp
+    ${VIVID_SRC_DIR}/src/runtime/graph/graph.cpp
+    ${VIVID_SRC_DIR}/src/runtime/graph/graph_compiler.cpp
+    ${VIVID_SRC_DIR}/src/runtime/graph/frame_executor.cpp
 )
 
 # nlohmann/json (header-only, matches vivid core)

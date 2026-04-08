@@ -1,70 +1,124 @@
 {
+    "schema_version": 3,
+    "vivid_version": "0.1.0",
     "nodes": {
         "cube": {
             "type": "Shape3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "r": 0.20000000298023224,
+                "r": 0.2,
                 "pos_x": -2.5,
-                "b": 1.0,
-                "g": 0.6000000238418579,
-                "shape": 0.0
-            }
-        },
-        "sphere": {
-            "type": "Shape3D",
-            "params": {
-                "r": 1.0,
-                "pos_x": 0.0,
-                "b": 0.20000000298023224,
-                "g": 0.4000000059604645,
-                "shape": 1.0
-            }
-        },
-        "torus": {
-            "type": "Shape3D",
-            "params": {
-                "r": 0.30000001192092896,
-                "pos_x": 2.5,
-                "b": 0.4000000059604645,
-                "g": 1.0,
-                "shape": 2.0
+                "shape": 0.0,
+                "g": 0.6,
+                "b": 1.0
+            },
+            "layout": {
+                "x": 64.45496,
+                "y": 51.42598
             }
         },
         "light": {
             "type": "Light3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
-                "intensity": 1.2000000476837158,
-                "type": 0.0
+                "type": 0.0,
+                "intensity": 1.2
+            },
+            "layout": {
+                "x": -71.57422,
+                "y": 601.8906
             }
         },
         "merge": {
             "type": "SceneMerge",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "layout": {
-                "x": 230.0,
-                "y": 400.0
+                "x": 311.84067,
+                "y": 265.72568
             }
         },
         "orbit_cam": {
             "type": "OrbitCamera",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "params": {
                 "distance": 5.0,
-                "azimuth": -36,
-                "elevation": 1.4
+                "elevation": 1.4,
+                "azimuth": -36.0
+            },
+            "layout": {
+                "x": 409.22107,
+                "y": 615.92065
             }
         },
         "render": {
             "type": "Render3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
             "layout": {
-                "x": 430.0,
-                "y": 418.0
+                "x": 640.1324,
+                "y": 430.79556
             },
             "resolution": [
                 1920,
                 1080
             ]
         },
+        "sphere": {
+            "type": "Shape3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "r": 1.0,
+                "pos_x": 0.0,
+                "shape": 1.0,
+                "g": 0.4,
+                "b": 0.2
+            },
+            "layout": {
+                "x": -123.71424,
+                "y": 189.32195
+            }
+        },
+        "torus": {
+            "type": "Shape3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "r": 0.3,
+                "pos_x": 2.5,
+                "shape": 2.0,
+                "g": 1.0,
+                "b": 0.4
+            },
+            "layout": {
+                "x": -241.5,
+                "y": 381.3047
+            }
+        },
         "vout": {
-            "type": "video_out"
+            "type": "video_out",
+            "layout": {
+                "x": 840.90485,
+                "y": 429.37177
+            }
         }
     },
     "connections": [
@@ -118,8 +172,8 @@
         }
     ],
     "viewport": {
-        "pan_x": 313.1322326660156,
-        "pan_y": 109.7188491821289,
-        "zoom": 0.694665253162384
+        "pan_x": 437.2553,
+        "pan_y": 114.61729,
+        "zoom": 1.0113974
     }
 }
