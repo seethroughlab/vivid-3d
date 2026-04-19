@@ -10,7 +10,13 @@
 #include <vector>
 
 // =============================================================================
-// InstancedRender — renders N instances of an input mesh to a texture.
+// MeshDraw — low-level per-instance mesh renderer.
+//
+// Draws N instances of an input mesh using a compute-buffer or lane-array
+// source of per-instance translations. The high-level consumer-facing operator
+// is Instancer3D — prefer that when you have a mesh + per-instance data bundle.
+// MeshDraw is the primitive used internally by Particles3D and similar compute
+// pipelines that already own a GPU buffer of transforms.
 //
 // Input ports:
 //   "mesh"       VIVID_CUSTOM_PORT     (required) — geometry to draw
@@ -29,7 +35,7 @@
 
 // WGSL shader — custom vertex + simple white fragment.
 // Does NOT use FULLSCREEN_VERTEX_WGSL; compiled manually.
-static const char* kInstancedRenderShader = R"(
+static const char* kMeshDrawShader = R"(
 
 struct Uniforms {
     scale: f32,
@@ -61,25 +67,25 @@ fn fs_main() -> @location(0) vec4f {
 )";
 
 // Uniforms struct (16 bytes, vec4-aligned)
-struct InstancedRenderUniforms {
+struct MeshDrawUniforms {
     float scale;
     float _pad0, _pad1, _pad2;
 };
 
 // =============================================================================
-// InstancedRender Operator
+// MeshDraw Operator
 // =============================================================================
 
 /**
  * @brief Renders many copies of a mesh using per-instance transforms.
  *
- * InstancedRender draws geometry supplied by upstream 3D operators while applying per-instance
+ * MeshDraw draws geometry supplied by upstream 3D operators while applying per-instance
  * placement, making it useful for dense scenes and repeated motifs.
  *
  * @param scale Global scale applied to each rendered instance.
  */
-struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
-    static constexpr const char* kName   = "InstancedRender";
+struct MeshDraw : vivid::OperatorBase, vivid::GpuProcessable {
+    static constexpr const char* kName   = "MeshDraw";
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> scale {"scale", 0.1f, 0.001f, 1.0f};
@@ -111,7 +117,7 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
         // --- Rebuild render pipeline if mesh stride changed ---
         if (!pipeline_ || mesh->vertex_stride != built_stride_) {
             if (!lazy_init(ctx, mesh->vertex_stride)) {
-                std::fprintf(stderr, "[instanced_render] lazy_init FAILED\n");
+                std::fprintf(stderr, "[mesh_draw] lazy_init FAILED\n");
                 return;
             }
         }
@@ -173,7 +179,7 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
         }
 
         // --- Upload uniforms ---
-        InstancedRenderUniforms u{};
+        MeshDrawUniforms u{};
         u.scale = scale.value;
         wgpuQueueWriteBuffer(ctx->queue, uniform_buf_, 0, &u, sizeof(u));
 
@@ -186,7 +192,7 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
         color_att.clearValue   = {0.0, 0.0, 0.0, 0.0};
 
         WGPURenderPassDescriptor rp_desc{};
-        rp_desc.label                = vivid_sv("InstancedRender Pass");
+        rp_desc.label                = vivid_sv("MeshDraw Pass");
         rp_desc.colorAttachmentCount = 1;
         rp_desc.colorAttachments     = &color_att;
 
@@ -216,7 +222,7 @@ struct InstancedRender : vivid::OperatorBase, vivid::GpuProcessable {
         wgpuRenderPassEncoderRelease(pass);
     }
 
-    ~InstancedRender() override {
+    ~MeshDraw() override {
         vivid::gpu::release(pipeline_);
         vivid::gpu::release(bind_group0_);
         vivid::gpu::release(transform_bind_group_);
@@ -252,7 +258,7 @@ private:
         att.storeOp    = WGPUStoreOp_Store;
         att.clearValue = {0.0, 0.0, 0.0, 0.0};
         WGPURenderPassDescriptor rp{};
-        rp.label                = vivid_sv("InstancedRender Clear");
+        rp.label                = vivid_sv("MeshDraw Clear");
         rp.colorAttachmentCount = 1;
         rp.colorAttachments     = &att;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
@@ -273,7 +279,7 @@ private:
         if (bytes < 16) bytes = 16;
 
         WGPUBufferDescriptor bd{};
-        bd.label = vivid_sv("InstancedRender Storage");
+        bd.label = vivid_sv("MeshDraw Storage");
         bd.size  = bytes;
         bd.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
         storage_buf_ = wgpuDeviceCreateBuffer(ctx->device, &bd);
@@ -293,7 +299,7 @@ private:
         entry.size    = size;
 
         WGPUBindGroupDescriptor bg_desc{};
-        bg_desc.label      = vivid_sv("InstancedRender Transform BG");
+        bg_desc.label      = vivid_sv("MeshDraw Transform BG");
         bg_desc.layout     = bind_layout1_;
         bg_desc.entryCount = 1;
         bg_desc.entries    = &entry;
@@ -313,14 +319,14 @@ private:
         built_stride_ = vertex_stride;
 
         // Compile shader (no fullscreen vertex preamble — we have our own VS)
-        std::string wgsl = std::string(vivid::gpu::WGSL_CONSTANTS) + kInstancedRenderShader;
+        std::string wgsl = std::string(vivid::gpu::WGSL_CONSTANTS) + kMeshDrawShader;
         WGPUShaderSourceWGSL wgsl_src{};
         wgsl_src.chain.sType = WGPUSType_ShaderSourceWGSL;
         wgsl_src.code = vivid_sv(wgsl.c_str());
 
         WGPUShaderModuleDescriptor sm_desc{};
         sm_desc.nextInChain = &wgsl_src.chain;
-        sm_desc.label = vivid_sv("InstancedRender Shader");
+        sm_desc.label = vivid_sv("MeshDraw Shader");
 
         // Release previous shader if rebuilding
         vivid::gpu::release(shader_);
@@ -330,7 +336,7 @@ private:
         // Create uniform buffer once (kept across stride rebuilds)
         if (!uniform_buf_) {
             uniform_buf_ = vivid::gpu::create_uniform_buffer(
-                ctx->device, sizeof(InstancedRenderUniforms), "InstancedRender Uniforms");
+                ctx->device, sizeof(MeshDrawUniforms), "MeshDraw Uniforms");
         }
 
         // --- Bind group layout 0: uniform at binding 0 ---
@@ -338,10 +344,10 @@ private:
         bgl0_entry.binding    = 0;
         bgl0_entry.visibility = WGPUShaderStage_Vertex;
         bgl0_entry.buffer.type            = WGPUBufferBindingType_Uniform;
-        bgl0_entry.buffer.minBindingSize  = sizeof(InstancedRenderUniforms);
+        bgl0_entry.buffer.minBindingSize  = sizeof(MeshDrawUniforms);
 
         WGPUBindGroupLayoutDescriptor bgl0_desc{};
-        bgl0_desc.label      = vivid_sv("InstancedRender BGL0");
+        bgl0_desc.label      = vivid_sv("MeshDraw BGL0");
         bgl0_desc.entryCount = 1;
         bgl0_desc.entries    = &bgl0_entry;
         bind_layout0_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl0_desc);
@@ -351,10 +357,10 @@ private:
         bg0_entry.binding = 0;
         bg0_entry.buffer  = uniform_buf_;
         bg0_entry.offset  = 0;
-        bg0_entry.size    = sizeof(InstancedRenderUniforms);
+        bg0_entry.size    = sizeof(MeshDrawUniforms);
 
         WGPUBindGroupDescriptor bg0_desc{};
-        bg0_desc.label      = vivid_sv("InstancedRender BG0");
+        bg0_desc.label      = vivid_sv("MeshDraw BG0");
         bg0_desc.layout     = bind_layout0_;
         bg0_desc.entryCount = 1;
         bg0_desc.entries    = &bg0_entry;
@@ -368,7 +374,7 @@ private:
         bgl1_entry.buffer.minBindingSize = 0;
 
         WGPUBindGroupLayoutDescriptor bgl1_desc{};
-        bgl1_desc.label      = vivid_sv("InstancedRender BGL1");
+        bgl1_desc.label      = vivid_sv("MeshDraw BGL1");
         bgl1_desc.entryCount = 1;
         bgl1_desc.entries    = &bgl1_entry;
         bind_layout1_ = wgpuDeviceCreateBindGroupLayout(ctx->device, &bgl1_desc);
@@ -376,7 +382,7 @@ private:
         // --- Pipeline layout ---
         WGPUBindGroupLayout layouts[2] = {bind_layout0_, bind_layout1_};
         WGPUPipelineLayoutDescriptor pl_desc{};
-        pl_desc.label                = vivid_sv("InstancedRender Pipeline Layout");
+        pl_desc.label                = vivid_sv("MeshDraw Pipeline Layout");
         pl_desc.bindGroupLayoutCount = 2;
         pl_desc.bindGroupLayouts     = layouts;
         pipe_layout_ = wgpuDeviceCreatePipelineLayout(ctx->device, &pl_desc);
@@ -414,7 +420,7 @@ private:
         fragment.targets     = &color_target;
 
         WGPURenderPipelineDescriptor rp_desc{};
-        rp_desc.label                    = vivid_sv("InstancedRender Pipeline");
+        rp_desc.label                    = vivid_sv("MeshDraw Pipeline");
         rp_desc.layout                   = pipe_layout_;
         rp_desc.vertex.module            = shader_;
         rp_desc.vertex.entryPoint        = vivid_sv("vs_main");
@@ -432,6 +438,6 @@ private:
     }
 };
 
-VIVID_REGISTER(InstancedRender)
+VIVID_REGISTER(MeshDraw)
 
 VIVID_DESCRIBE_REF_TYPES2(VividMesh, VividComputeBuffer)

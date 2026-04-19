@@ -15,7 +15,7 @@
 ## Highlights
 
 - procedural primitives: `Grid`, `Box`, `Sphere`, `Shape3D`, `MeshBuilder`, `Sweep`, `SDF3D`
-- scene utilities: `Transform3D`, `SceneMerge`, `Instancer3D`, `InstancedRender`, `MeshImport`
+- scene utilities: `Transform3D`, `SceneMerge`, `Instancer3D`, `MeshDraw`, `MeshImport`
 - look development: `Material3D`, `Light3D`, `Environment3D`, `Boolean3D`
 - rendering and post: `Render3D`, `SSAO3D`, `DepthOfField3D`, `DepthMask3D`
 - motion systems: `Particles3D`, `Deformer`

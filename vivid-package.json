@@ -16,7 +16,7 @@
     "gpu/sphere",
     "gpu/box",
     "gpu/point_cloud",
-    "gpu/instanced_render",
+    "gpu/mesh_draw",
     "gpu/render_3d",
     "gpu/shape3d",
     "gpu/transform3d",

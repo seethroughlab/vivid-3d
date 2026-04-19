@@ -51,7 +51,7 @@
       }
     },
     "ir1": {
-      "type": "InstancedRender",
+      "type": "MeshDraw",
       "params": {
         "scale": 0.05
       }
