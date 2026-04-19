@@ -1,6 +1,10 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <cmath>
 
@@ -95,6 +99,125 @@ struct Transform3D : vivid::OperatorBase, vivid::GpuProcessable {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, "Xform");
+
+        // Badge surfaces which transform component is active. Priority R > S > T.
+        const float eps_rot = 1e-3f;
+        const float eps_scale = 1e-3f;
+        const float eps_pos = 1e-3f;
+        bool has_rot   = std::fabs(rot_x.value)  > eps_rot   ||
+                         std::fabs(rot_y.value)  > eps_rot   ||
+                         std::fabs(rot_z.value)  > eps_rot;
+        bool has_scale = std::fabs(scale_x.value - 1.0f) > eps_scale ||
+                         std::fabs(scale_y.value - 1.0f) > eps_scale ||
+                         std::fabs(scale_z.value - 1.0f) > eps_scale;
+        bool has_pos   = std::fabs(pos_x.value) > eps_pos ||
+                         std::fabs(pos_y.value) > eps_pos ||
+                         std::fabs(pos_z.value) > eps_pos;
+        const char* badge = has_rot ? "R" : has_scale ? "S" : has_pos ? "T" : "id";
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 12.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Body area — draw a cube wireframe projected orthographically, rotated
+        // and scaled by the operator's transform. Position nudges the centre a
+        // little so translation is legible without dragging the cube offscreen.
+        float body_top = 18.0f;
+        float body_h = h - body_top - 4.0f;
+        float body_w = w - 12.0f;
+        float body_side = std::min(body_w, body_h);
+        float cx = w * 0.5f;
+        float cy = body_top + body_h * 0.5f;
+
+        // Clamp scale to keep the cube visible but expressive. sqrt helps huge
+        // scales still fit while preserving relative proportions.
+        auto shrink = [](float s) {
+            float sign = s < 0.0f ? -1.0f : 1.0f;
+            return sign * std::sqrt(std::min(std::fabs(s), 10.0f));
+        };
+        float sx = shrink(scale_x.value);
+        float sy = shrink(scale_y.value);
+        float sz = shrink(scale_z.value);
+
+        // Half-extent of the unit cube in screen space at scale=1. Leave a margin
+        // so a unit cube with modest rotation doesn't touch the body edges.
+        float base = body_side * 0.22f;
+
+        float hx = base * sx;
+        float hy = base * sy;
+        float hz = base * sz;
+
+        float rx = rot_x.value;
+        float ry = rot_y.value;
+        float rz = rot_z.value;
+        float cx_r = std::cos(rx), sx_r = std::sin(rx);
+        float cy_r = std::cos(ry), sy_r = std::sin(ry);
+        float cz_r = std::cos(rz), sz_r = std::sin(rz);
+
+        auto rotate = [&](float x, float y, float z, float& ox, float& oy, float& oz) {
+            // X-rotation
+            float y1 =  y * cx_r - z * sx_r;
+            float z1 =  y * sx_r + z * cx_r;
+            // Y-rotation
+            float x2 =  x * cy_r + z1 * sy_r;
+            float z2 = -x * sy_r + z1 * cy_r;
+            // Z-rotation
+            float x3 = x2 * cz_r - y1 * sz_r;
+            float y3 = x2 * sz_r + y1 * cz_r;
+            ox = x3; oy = y3; oz = z2;
+        };
+
+        // Translation: project pos (x, y) into a small shift within the body.
+        auto shift = [body_side](float v) {
+            float clamped = std::max(-1.0f, std::min(1.0f, v / 10.0f));
+            return clamped * body_side * 0.12f;
+        };
+        float tx_scr = shift(pos_x.value);
+        float ty_scr = -shift(pos_y.value); // +Y in world → up on screen
+
+        float corners[8][3] = {
+            {-hx, -hy, -hz}, { hx, -hy, -hz},
+            { hx,  hy, -hz}, {-hx,  hy, -hz},
+            {-hx, -hy,  hz}, { hx, -hy,  hz},
+            { hx,  hy,  hz}, {-hx,  hy,  hz},
+        };
+        float screen[8][2];
+        for (int i = 0; i < 8; ++i) {
+            float rxf, ryf, rzf;
+            rotate(corners[i][0], corners[i][1], corners[i][2], rxf, ryf, rzf);
+            screen[i][0] = cx + rxf + tx_scr;
+            screen[i][1] = cy - ryf + ty_scr;
+        }
+
+        static const int kEdges[12][2] = {
+            {0,1},{1,2},{2,3},{3,0},         // back face
+            {4,5},{5,6},{6,7},{7,4},         // front face
+            {0,4},{1,5},{2,6},{3,7},         // connecting edges
+        };
+        VividColor line_col = {0.70f, 0.78f, 0.85f, 0.95f};
+        for (auto& e : kEdges) {
+            d.draw_line(o, screen[e[0]][0], screen[e[0]][1],
+                        screen[e[1]][0], screen[e[1]][1], 1.2f, line_col);
+        }
+
+        // Pivot dot at projected origin.
+        d.draw_rounded_rect(o, cx + tx_scr - 1.5f, cy + ty_scr - 1.5f,
+                            3.0f, 3.0f, 1.5f,
+                            VividColor{1.0f, 0.78f, 0.31f, 0.9f});
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         // No input scene → no output
         bool has_input = ctx->custom_input_count > 0 &&
@@ -136,5 +259,6 @@ private:
 };
 
 VIVID_REGISTER(Transform3D)
+VIVID_THUMBNAIL(Transform3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

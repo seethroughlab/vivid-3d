@@ -2,6 +2,9 @@
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -436,6 +439,69 @@ struct Environment3D : vivid::OperatorBase, vivid::GpuProcessable {
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back({"hdri",  VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+
+        bool has_hdri = ctx->input_texture_count > 0
+                        && ctx->input_texture_views
+                        && ctx->input_texture_views[0] != nullptr;
+        const char* label = has_hdri ? "HDRI" : "Env";
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, label);
+
+        char badge[16];
+        std::snprintf(badge, sizeof(badge), "%.1fx", intensity.value);
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 24.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Body: stylised horizon — brighter sky band above a darker ground band.
+        float body_x = 10.0f;
+        float body_y = 18.0f;
+        float body_w = w - 20.0f;
+        float body_h = h - body_y - 6.0f;
+
+        // Intensity scales how vivid the colors are; goes to near-black at 0.
+        float k = std::clamp(intensity.value / 2.0f, 0.05f, 1.2f);
+
+        // Sky (upper 60%): soft blue when no HDRI, warmer when HDRI connected.
+        float sky_h = body_h * 0.6f;
+        VividColor sky = has_hdri
+            ? VividColor{0.55f * k, 0.48f * k, 0.38f * k, 0.95f}   // warm tone
+            : VividColor{0.22f * k, 0.30f * k, 0.42f * k, 0.95f};  // cool tone
+        d.draw_rounded_rect(o, body_x, body_y, body_w, sky_h, 4.0f, sky);
+
+        // Ground (lower 40%): darker warm.
+        VividColor ground = has_hdri
+            ? VividColor{0.18f * k, 0.14f * k, 0.12f * k, 0.95f}
+            : VividColor{0.10f * k, 0.10f * k, 0.12f * k, 0.95f};
+        d.draw_rounded_rect(o, body_x, body_y + sky_h, body_w, body_h - sky_h, 4.0f, ground);
+
+        // Horizon line.
+        d.draw_line(o,
+                    body_x + 2.0f, body_y + sky_h,
+                    body_x + body_w - 2.0f, body_y + sky_h,
+                    1.0f, VividColor{0.85f, 0.75f, 0.55f, 0.55f});
+
+        // Rotation indicator: a small disc on the horizon offset by rotation_y (−180..+180 → full width).
+        float rot = std::clamp(rotation_y.value / 180.0f, -1.0f, 1.0f);
+        float disc_cx = body_x + body_w * 0.5f + rot * (body_w * 0.4f);
+        float disc_cy = body_y + sky_h;
+        float disc_r = 3.0f;
+        d.draw_rounded_rect(o, disc_cx - disc_r, disc_cy - disc_r,
+                            disc_r * 2.0f, disc_r * 2.0f, disc_r,
+                            VividColor{1.0f, 0.85f, 0.5f, 0.95f});
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -939,5 +1005,6 @@ private:
 };
 
 VIVID_REGISTER(Environment3D)
+VIVID_THUMBNAIL(Environment3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

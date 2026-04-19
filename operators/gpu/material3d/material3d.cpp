@@ -1,6 +1,10 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 // =============================================================================
@@ -68,6 +72,74 @@ struct Material3D : vivid::OperatorBase, vivid::GpuProcessable {
         out.push_back({"roughness_metallic_map", VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
         out.push_back({"emission_map",           VIVID_PORT_TEXTURE, VIVID_PORT_INPUT});
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+
+        // Label: shading mode. Unlit wins, then toon/PBR from `shading` blend.
+        const char* label;
+        if (unlit.value > 0.5f)           label = "Unlit";
+        else if (shading.value > 0.5f)    label = "Toon";
+        else                              label = "PBR";
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, label);
+
+        // Badge: "R.50 M.00" — roughness + metallic at a glance.
+        char badge[24];
+        std::snprintf(badge, sizeof(badge), "R%.2f M%.2f", roughness.value, metallic.value);
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 72.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Body: color swatch with a vertical gradient that gets tighter as roughness drops
+        // (sharp highlight band for glossy, diffuse wash for matte).
+        float body_x = 10.0f;
+        float body_y = 18.0f;
+        float body_w = w - 20.0f;
+        float body_h = h - body_y - 6.0f;
+
+        float cr = color_r.value, cg = color_g.value, cb = color_b.value;
+        float alpha = std::clamp(color_a.value, 0.2f, 1.0f);
+        d.draw_rounded_rect(o, body_x, body_y, body_w, body_h, 4.0f,
+                            VividColor{cr, cg, cb, alpha});
+
+        // Highlight strip: narrows + brightens as roughness decreases.
+        // Pull toward white for dielectrics, toward the base color for metals.
+        float smooth = 1.0f - std::clamp(roughness.value, 0.0f, 1.0f);
+        float strip_h = std::max(3.0f, body_h * (0.1f + 0.6f * smooth));
+        float strip_y = body_y + body_h * 0.15f;
+        float lift = 0.35f + 0.65f * smooth;
+        float hr = cr + (1.0f - cr) * lift * (1.0f - metallic.value);
+        float hg = cg + (1.0f - cg) * lift * (1.0f - metallic.value);
+        float hb = cb + (1.0f - cb) * lift * (1.0f - metallic.value);
+        d.draw_rounded_rect(o, body_x + 4.0f, strip_y, body_w - 8.0f, strip_h, 2.0f,
+                            VividColor{hr, hg, hb, 0.55f + 0.35f * smooth});
+
+        // Metallic indicator: right-edge band when metallic > 0.
+        if (metallic.value > 0.05f) {
+            float band_w = 3.0f;
+            d.draw_rounded_rect(o, body_x + body_w - band_w - 2.0f, body_y + 3.0f,
+                                band_w, body_h - 6.0f, 1.5f,
+                                VividColor{0.95f, 0.93f, 0.85f, 0.6f + 0.4f * metallic.value});
+        }
+
+        // Emission halo: outer glow when emission > 0.
+        if (emission.value > 0.05f) {
+            float e = std::clamp(emission.value / 2.0f, 0.0f, 1.0f);
+            d.draw_rounded_rect(o, body_x - 1.5f, body_y - 1.5f,
+                                body_w + 3.0f, body_h + 3.0f, 5.0f,
+                                VividColor{cr, cg, cb, 0.25f * e});
+        }
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -221,5 +293,6 @@ private:
 };
 
 VIVID_REGISTER(Material3D)
+VIVID_THUMBNAIL(Material3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

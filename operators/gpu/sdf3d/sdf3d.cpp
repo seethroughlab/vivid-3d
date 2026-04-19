@@ -1,11 +1,13 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_3d_gpu.h"
 #include "linmath.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <string>
+#include <vector>
 
 // =============================================================================
 // SDF3D — Raymarched Signed Distance Fields
@@ -338,6 +340,198 @@ fn fs_main(in: SDFVertexOutput) -> SDFFragOutput {
 )";
 
 // =============================================================================
+// Thumbnail proxy meshes — position-only low-poly primitives that match the
+// five shape_a options. Rendered by render_mesh() with pseudo-normal shading.
+// The thumbnail is small (~140x88 px) so detail is intentionally low.
+// =============================================================================
+
+namespace {
+
+struct ProxyVert { float pos[3]; };
+
+struct ProxyGeom {
+    std::vector<ProxyVert> verts;
+    std::vector<uint32_t>  indices;
+    float bmin[3];
+    float bmax[3];
+};
+
+static void finalize_bounds(ProxyGeom& g) {
+    g.bmin[0] = g.bmin[1] = g.bmin[2] =  1e9f;
+    g.bmax[0] = g.bmax[1] = g.bmax[2] = -1e9f;
+    for (const auto& v : g.verts) {
+        for (int i = 0; i < 3; ++i) {
+            if (v.pos[i] < g.bmin[i]) g.bmin[i] = v.pos[i];
+            if (v.pos[i] > g.bmax[i]) g.bmax[i] = v.pos[i];
+        }
+    }
+}
+
+// Unit cube, extents [-0.5, 0.5]. CCW-from-outside winding.
+static void build_cube_proxy(ProxyGeom& g) {
+    g.verts = {
+        {{-0.5f,-0.5f,-0.5f}}, {{ 0.5f,-0.5f,-0.5f}},
+        {{ 0.5f, 0.5f,-0.5f}}, {{-0.5f, 0.5f,-0.5f}},
+        {{-0.5f,-0.5f, 0.5f}}, {{ 0.5f,-0.5f, 0.5f}},
+        {{ 0.5f, 0.5f, 0.5f}}, {{-0.5f, 0.5f, 0.5f}},
+    };
+    g.indices = {
+        0,2,1, 0,3,2,   // -Z
+        4,5,6, 4,6,7,   // +Z
+        0,4,7, 0,7,3,   // -X
+        1,2,6, 1,6,5,   // +X
+        0,1,5, 0,5,4,   // -Y
+        3,7,6, 3,6,2,   // +Y
+    };
+    finalize_bounds(g);
+}
+
+// UV sphere, radius 0.5, 6 stacks x 8 slices.
+static void build_sphere_proxy(ProxyGeom& g) {
+    const int stacks = 6, slices = 8;
+    const float r = 0.5f;
+    const float kPi = 3.14159265358979323846f;
+    const float kTau = 6.28318530717958647692f;
+    for (int i = 0; i <= stacks; ++i) {
+        float phi = kPi * static_cast<float>(i) / static_cast<float>(stacks);
+        float sp = std::sin(phi), cp = std::cos(phi);
+        for (int j = 0; j <= slices; ++j) {
+            float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+            float st = std::sin(th), ct = std::cos(th);
+            g.verts.push_back({{ r * sp * ct, r * cp, r * sp * st }});
+        }
+    }
+    for (int i = 0; i < stacks; ++i) {
+        for (int j = 0; j < slices; ++j) {
+            uint32_t a = static_cast<uint32_t>(i * (slices + 1) + j);
+            uint32_t b = a + 1;
+            uint32_t c = static_cast<uint32_t>((i + 1) * (slices + 1) + j);
+            uint32_t d = c + 1;
+            g.indices.push_back(a); g.indices.push_back(c); g.indices.push_back(d);
+            g.indices.push_back(a); g.indices.push_back(d); g.indices.push_back(b);
+        }
+    }
+    finalize_bounds(g);
+}
+
+// Torus, major R=0.35, minor r=0.15, 10 rings x 6 sides.
+static void build_torus_proxy(ProxyGeom& g) {
+    const int rings = 10, sides = 6;
+    const float R = 0.35f, r = 0.15f;
+    const float kTau = 6.28318530717958647692f;
+    for (int i = 0; i <= rings; ++i) {
+        float u = kTau * static_cast<float>(i) / static_cast<float>(rings);
+        float cu = std::cos(u), su = std::sin(u);
+        for (int j = 0; j <= sides; ++j) {
+            float v = kTau * static_cast<float>(j) / static_cast<float>(sides);
+            float cv = std::cos(v), sv = std::sin(v);
+            g.verts.push_back({{
+                (R + r * cv) * cu,
+                r * sv,
+                (R + r * cv) * su,
+            }});
+        }
+    }
+    for (int i = 0; i < rings; ++i) {
+        for (int j = 0; j < sides; ++j) {
+            uint32_t a = static_cast<uint32_t>(i * (sides + 1) + j);
+            uint32_t b = a + 1;
+            uint32_t c = static_cast<uint32_t>((i + 1) * (sides + 1) + j);
+            uint32_t d = c + 1;
+            g.indices.push_back(a); g.indices.push_back(b); g.indices.push_back(c);
+            g.indices.push_back(b); g.indices.push_back(d); g.indices.push_back(c);
+        }
+    }
+    finalize_bounds(g);
+}
+
+// Cylinder, radius 0.5, height 1.0, 8 slices, body + 2 caps.
+static void build_cylinder_proxy(ProxyGeom& g) {
+    const int slices = 8;
+    const float r = 0.5f, h = 0.5f;
+    const float kTau = 6.28318530717958647692f;
+    // Body ring: bottom then top, wrap-duplicated.
+    for (int i = 0; i <= 1; ++i) {
+        float y = (i == 0) ? -h : h;
+        for (int j = 0; j <= slices; ++j) {
+            float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+            g.verts.push_back({{ r * std::cos(th), y, r * std::sin(th) }});
+        }
+    }
+    for (int j = 0; j < slices; ++j) {
+        uint32_t a = static_cast<uint32_t>(j);
+        uint32_t b = a + 1;
+        uint32_t c = static_cast<uint32_t>(slices + 1 + j);
+        uint32_t d = c + 1;
+        g.indices.push_back(a); g.indices.push_back(c); g.indices.push_back(d);
+        g.indices.push_back(a); g.indices.push_back(d); g.indices.push_back(b);
+    }
+    // Top cap
+    uint32_t top_center = static_cast<uint32_t>(g.verts.size());
+    g.verts.push_back({{ 0.0f, h, 0.0f }});
+    uint32_t top_ring = static_cast<uint32_t>(g.verts.size());
+    for (int j = 0; j <= slices; ++j) {
+        float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+        g.verts.push_back({{ r * std::cos(th), h, r * std::sin(th) }});
+    }
+    for (int j = 0; j < slices; ++j) {
+        g.indices.push_back(top_center);
+        g.indices.push_back(top_ring + static_cast<uint32_t>(j));
+        g.indices.push_back(top_ring + static_cast<uint32_t>(j + 1));
+    }
+    // Bottom cap (reversed winding)
+    uint32_t bot_center = static_cast<uint32_t>(g.verts.size());
+    g.verts.push_back({{ 0.0f, -h, 0.0f }});
+    uint32_t bot_ring = static_cast<uint32_t>(g.verts.size());
+    for (int j = 0; j <= slices; ++j) {
+        float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+        g.verts.push_back({{ r * std::cos(th), -h, r * std::sin(th) }});
+    }
+    for (int j = 0; j < slices; ++j) {
+        g.indices.push_back(bot_center);
+        g.indices.push_back(bot_ring + static_cast<uint32_t>(j + 1));
+        g.indices.push_back(bot_ring + static_cast<uint32_t>(j));
+    }
+    finalize_bounds(g);
+}
+
+// Cone, radius 0.5 base, height 1.0, apex at +Y, 8 slices + base cap.
+static void build_cone_proxy(ProxyGeom& g) {
+    const int slices = 8;
+    const float r = 0.5f, h = 0.5f;
+    const float kTau = 6.28318530717958647692f;
+    // Apex (duplicated per slice for flat-ish shading via shared apex vert is fine here).
+    uint32_t apex = static_cast<uint32_t>(g.verts.size());
+    g.verts.push_back({{ 0.0f, h, 0.0f }});
+    uint32_t base_ring = static_cast<uint32_t>(g.verts.size());
+    for (int j = 0; j <= slices; ++j) {
+        float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+        g.verts.push_back({{ r * std::cos(th), -h, r * std::sin(th) }});
+    }
+    for (int j = 0; j < slices; ++j) {
+        g.indices.push_back(apex);
+        g.indices.push_back(base_ring + static_cast<uint32_t>(j));
+        g.indices.push_back(base_ring + static_cast<uint32_t>(j + 1));
+    }
+    // Base cap (reversed winding so it faces -Y).
+    uint32_t bot_center = static_cast<uint32_t>(g.verts.size());
+    g.verts.push_back({{ 0.0f, -h, 0.0f }});
+    uint32_t bot_ring = static_cast<uint32_t>(g.verts.size());
+    for (int j = 0; j <= slices; ++j) {
+        float th = kTau * static_cast<float>(j) / static_cast<float>(slices);
+        g.verts.push_back({{ r * std::cos(th), -h, r * std::sin(th) }});
+    }
+    for (int j = 0; j < slices; ++j) {
+        g.indices.push_back(bot_center);
+        g.indices.push_back(bot_ring + static_cast<uint32_t>(j + 1));
+        g.indices.push_back(bot_ring + static_cast<uint32_t>(j));
+    }
+    finalize_bounds(g);
+}
+
+} // namespace
+
+// =============================================================================
 // SDF3D Operator
 // =============================================================================
 
@@ -478,6 +672,26 @@ struct SDF3D : vivid::OperatorBase, vivid::GpuProcessable {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->device || !ctx->queue) return;
+        int idx = shape.int_value();
+        if (idx < 0 || idx >= kProxyCount) idx = 0;
+
+        ensure_proxy(ctx, idx);
+        const ProxyBuffers& p = proxy_[idx];
+        if (!p.vb || !p.ib || p.index_count == 0) return;
+
+        float color[3] = { r.value, g.value, b.value };
+        vivid::thumb3d_gpu::render_mesh(
+            ctx,
+            p.vb, p.vb_size,
+            p.ib, p.index_count,
+            static_cast<uint32_t>(sizeof(ProxyVert)),
+            WGPUPrimitiveTopology_TriangleList,
+            p.bmin, p.bmax,
+            color);
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         if (!pipeline_) {
             if (!lazy_init(ctx)) {
@@ -595,6 +809,10 @@ struct SDF3D : vivid::OperatorBase, vivid::GpuProcessable {
         vivid::gpu::release(lights_ubo_);
         vivid::gpu::release(quad_vb_);
         vivid::gpu::release(quad_ib_);
+        for (auto& p : proxy_) {
+            vivid::gpu::release(p.vb);
+            vivid::gpu::release(p.ib);
+        }
     }
 
 private:
@@ -611,6 +829,43 @@ private:
     WGPUBuffer lights_ubo_ = nullptr;
     WGPUBuffer quad_vb_    = nullptr;
     WGPUBuffer quad_ib_    = nullptr;
+
+    // Thumbnail proxy buffers, one per shape_a value.
+    static constexpr int kProxyCount = 5;
+    struct ProxyBuffers {
+        WGPUBuffer vb = nullptr;
+        WGPUBuffer ib = nullptr;
+        uint64_t   vb_size = 0;
+        uint32_t   index_count = 0;
+        float      bmin[3] = {-0.5f, -0.5f, -0.5f};
+        float      bmax[3] = { 0.5f,  0.5f,  0.5f};
+    };
+    ProxyBuffers proxy_[kProxyCount]{};
+
+    void ensure_proxy(const VividThumbnailContext* ctx, int idx) {
+        ProxyBuffers& p = proxy_[idx];
+        if (p.vb && p.ib) return;
+
+        ProxyGeom g;
+        switch (idx) {
+            case 0: build_sphere_proxy(g);   break;
+            case 1: build_cube_proxy(g);     break;
+            case 2: build_torus_proxy(g);    break;
+            case 3: build_cylinder_proxy(g); break;
+            case 4: build_cone_proxy(g);     break;
+            default: build_sphere_proxy(g);  break;
+        }
+
+        p.vb_size     = g.verts.size() * sizeof(ProxyVert);
+        p.index_count = static_cast<uint32_t>(g.indices.size());
+        std::memcpy(p.bmin, g.bmin, sizeof(p.bmin));
+        std::memcpy(p.bmax, g.bmax, sizeof(p.bmax));
+
+        p.vb = vivid::gpu::create_vertex_buffer(
+            ctx->device, ctx->queue, g.verts.data(), p.vb_size, "SDF3D Proxy VB");
+        p.ib = vivid::gpu::create_index_buffer(
+            ctx->device, ctx->queue, g.indices.data(), p.index_count, "SDF3D Proxy IB");
+    }
 
     bool lazy_init(const VividGpuContext* ctx) {
         // Compile shader
@@ -739,5 +994,6 @@ private:
 };
 
 VIVID_REGISTER(SDF3D)
+VIVID_THUMBNAIL(SDF3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

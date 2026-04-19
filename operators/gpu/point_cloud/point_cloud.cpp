@@ -1,8 +1,10 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_common.h"
+#include "operator_api/gpu_3d.h"
 #include "operator_api/type_id.h"
 #include "operator_api/port_type_registry.h"
+#include "operator_api/thumbnail_instance_array.h"
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -73,7 +75,37 @@ struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
                                  lane_data, point_count * 2 * sizeof(float));
         }
 
+        // Shadow (x, y) pairs on the CPU so draw_thumbnail (called from a later
+        // frame phase) can visualize them without touching the GPU buffer.
+        thumb_points_.assign(lane_data,
+                             lane_data ? lane_data + point_count * 2 : lane_data);
+
         ctx->custom_outputs[0] = &mesh_;
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        uint32_t n = static_cast<uint32_t>(thumb_points_.size() / 2);
+        if (n == 0) {
+            vivid::thumb_instances::draw_scatter(ctx, nullptr, 0, "Cloud");
+            return;
+        }
+        // Convert (x, y) pairs into InstanceData3D for the shared helper.
+        // z = 0 (XY plane), scale = 1, color from operator's r/g/b.
+        std::vector<vivid::gpu::InstanceData3D> view(n);
+        float cr = r.value, cg = g.value, cb = b.value;
+        for (uint32_t i = 0; i < n; ++i) {
+            auto& inst = view[i];
+            inst.position[0] = thumb_points_[i * 2 + 0];
+            inst.position[1] = 0.0f;
+            inst.position[2] = thumb_points_[i * 2 + 1];
+            inst.scale[0] = inst.scale[1] = inst.scale[2] = 1.0f;
+            inst.rotation_x = inst.rotation_y = 0.0f;
+            inst.color[0] = cr;
+            inst.color[1] = cg;
+            inst.color[2] = cb;
+            inst.color[3] = 1.0f;
+        }
+        vivid::thumb_instances::draw_scatter(ctx, view.data(), n, "Cloud");
     }
 
     ~PointCloud() override {
@@ -85,6 +117,7 @@ private:
     VividMesh            mesh_{};
     VividVertexAttribute attrib_{};
     uint32_t             built_count_  = 0xFFFFFFFFu;
+    std::vector<float>   thumb_points_; // shadowed (x,y) pairs for draw_thumbnail
 
     void rebuild(const VividGpuContext* ctx, uint32_t point_count) {
         vivid::gpu::release(vertex_buf_);
@@ -119,5 +152,6 @@ private:
 };
 
 VIVID_REGISTER(PointCloud)
+VIVID_THUMBNAIL(PointCloud)
 
 VIVID_DESCRIBE_REF_TYPE(VividMesh)

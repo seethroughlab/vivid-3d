@@ -1,6 +1,11 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 
 // =============================================================================
 // Light3D — light source as a scene element
@@ -85,6 +90,80 @@ struct Light3D : vivid::OperatorBase, vivid::GpuProcessable {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
     }
 
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+
+        static const char* kTypeNames[] = { "Dir", "Point", "Spot" };
+        int ti = type.int_value();
+        const char* label = (ti >= 0 && ti < 3) ? kTypeNames[ti] : "Dir";
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, label);
+
+        char badge[16];
+        std::snprintf(badge, sizeof(badge), "%.1fx", intensity.value);
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 24.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Body: color swatch in the centre, modulated by intensity.
+        float body_x = 10.0f;
+        float body_y = 18.0f;
+        float body_w = w - 20.0f;
+        float body_h = h - body_y - 6.0f;
+
+        float alpha = std::clamp(intensity.value / 2.0f, 0.15f, 1.0f);
+        VividColor col = { r.value, g.value, b.value, alpha };
+        d.draw_rounded_rect(o, body_x, body_y, body_w, body_h, 4.0f, col);
+
+        // Type glyph drawn over the swatch in a contrast color.
+        float gx = body_x + body_w * 0.5f;
+        float gy = body_y + body_h * 0.5f;
+        float perceived = 0.299f * r.value + 0.587f * g.value + 0.114f * b.value;
+        VividColor ink = (perceived * alpha > 0.55f)
+            ? VividColor{0.08f, 0.09f, 0.10f, 0.9f}
+            : VividColor{1.0f, 1.0f, 1.0f, 0.85f};
+
+        if (ti == 0) {
+            // Directional: three parallel arrows.
+            for (int i = 0; i < 3; ++i) {
+                float yy = gy + (i - 1) * 7.0f;
+                d.draw_line(o, gx - 14.0f, yy, gx + 10.0f, yy, 1.5f, ink);
+                d.draw_line(o, gx + 6.0f, yy - 3.0f, gx + 10.0f, yy, 1.5f, ink);
+                d.draw_line(o, gx + 6.0f, yy + 3.0f, gx + 10.0f, yy, 1.5f, ink);
+            }
+        } else if (ti == 1) {
+            // Point: filled disc with rays.
+            float rad = 4.0f;
+            d.draw_rounded_rect(o, gx - rad, gy - rad, rad * 2.0f, rad * 2.0f, rad, ink);
+            for (int i = 0; i < 8; ++i) {
+                float a = 6.28318f * static_cast<float>(i) / 8.0f;
+                float x0 = gx + std::cos(a) * 7.0f;
+                float y0 = gy + std::sin(a) * 7.0f;
+                float x1 = gx + std::cos(a) * 13.0f;
+                float y1 = gy + std::sin(a) * 13.0f;
+                d.draw_line(o, x0, y0, x1, y1, 1.2f, ink);
+            }
+        } else {
+            // Spot: cone from top centre outward.
+            float apex_x = gx;
+            float apex_y = gy - 12.0f;
+            float half = std::max(4.0f, spot_angle.value * 0.35f);
+            float base_y = gy + 14.0f;
+            d.draw_line(o, apex_x, apex_y, apex_x - half, base_y, 1.5f, ink);
+            d.draw_line(o, apex_x, apex_y, apex_x + half, base_y, 1.5f, ink);
+            d.draw_line(o, apex_x - half, base_y, apex_x + half, base_y, 1.5f, ink);
+        }
+    }
+
     void process_gpu(const VividGpuContext* ctx) override {
         fragment_.fragment_type   = vivid::gpu::VividSceneFragment::LIGHT;
         fragment_.light_type      = static_cast<float>(type.int_value());
@@ -122,5 +201,6 @@ private:
 };
 
 VIVID_REGISTER(Light3D)
+VIVID_THUMBNAIL(Light3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)

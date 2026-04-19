@@ -1,6 +1,9 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -428,6 +431,82 @@ struct Particles3D : vivid::OperatorBase, vivid::GpuProcessable {
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, "Particles");
+
+        // Badge: count with k-suffix for readability.
+        int cnt = count.int_value();
+        char badge[16];
+        if (cnt >= 1000) std::snprintf(badge, sizeof(badge), "%dk", cnt / 1000);
+        else             std::snprintf(badge, sizeof(badge), "%d", cnt);
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 24.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Body: a fixed pseudo-random scatter of dots — particles live GPU-side
+        // and can't be read here, so we show a representative cloud instead.
+        // Dot size follows the `size` param; shape (billboard vs cuboid) picks
+        // square vs rounded primitives; colour is the operator's r/g/b/a.
+        float body_top = 18.0f;
+        float body_h = h - body_top - 4.0f;
+        float body_w = w - 8.0f;
+        float cx = w * 0.5f;
+        float cy = body_top + body_h * 0.5f;
+
+        // 16 fixed positions (Poisson-disc-ish by eye), in [-1, 1]^2.
+        static const float kPositions[16][2] = {
+            {-0.70f,  0.55f}, { 0.15f,  0.70f}, { 0.75f,  0.45f},
+            {-0.85f,  0.00f}, {-0.30f,  0.25f}, { 0.40f,  0.20f},
+            { 0.80f, -0.05f}, {-0.55f, -0.35f}, { 0.05f, -0.15f},
+            {-0.15f, -0.60f}, { 0.55f, -0.40f}, {-0.75f, -0.70f},
+            { 0.30f, -0.80f}, { 0.85f, -0.70f}, {-0.05f,  0.00f},
+            { 0.20f,  0.45f},
+        };
+
+        float size_clamped = std::clamp(size.value * 8.0f, 1.2f, 4.5f);
+        float rx = body_w * 0.45f;
+        float ry = body_h * 0.40f;
+
+        float cr = r.value, cg = g.value, cb = b.value, ca = std::max(0.35f, a.value);
+        bool is_cuboid = shape.int_value() == 1;
+
+        for (int i = 0; i < 16; ++i) {
+            float px = cx + kPositions[i][0] * rx;
+            float py = cy + kPositions[i][1] * ry;
+            // Vary alpha a little to suggest motion / depth.
+            float var = 0.65f + 0.35f * ((i * 37) % 100) / 100.0f;
+            VividColor col = {cr, cg, cb, ca * var};
+            if (is_cuboid) {
+                d.draw_rounded_rect(o, px - size_clamped * 0.5f, py - size_clamped * 0.5f,
+                                    size_clamped, size_clamped, 0.8f, col);
+            } else {
+                // Billboard — round dot.
+                float r_dot = size_clamped * 0.5f;
+                d.draw_rounded_rect(o, px - r_dot, py - r_dot,
+                                    r_dot * 2.0f, r_dot * 2.0f, r_dot, col);
+            }
+        }
+
+        // Emission halo when emission > 0: faint glow behind the cluster.
+        if (emission.value > 0.05f) {
+            float e = std::clamp(emission.value / 2.0f, 0.0f, 1.0f);
+            d.draw_rounded_rect(o, cx - rx * 1.05f, cy - ry * 1.05f,
+                                rx * 2.1f, ry * 2.1f, 8.0f,
+                                VividColor{cr, cg, cb, 0.12f * e});
+        }
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -872,5 +951,6 @@ private:
 };
 
 VIVID_REGISTER(Particles3D)
+VIVID_THUMBNAIL(Particles3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)
