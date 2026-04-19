@@ -1,0 +1,282 @@
+{
+    "schema_version": 1,
+    "vivid_version": "0.1.0",
+    "nodes": {
+        "adapter": {
+            "type": "InstancesFromLanes",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "layout": {
+                "x": 320.0,
+                "y": 560.0
+            }
+        },
+        "bloom": {
+            "type": "Bloom",
+            "layout": {
+                "x": 1180.0,
+                "y": 500.0
+            }
+        },
+        "cube": {
+            "type": "Shape3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "roughness": 0.3,
+                "shape": 0.0,
+                "r": 0.9,
+                "scale_x": 1.0,
+                "metallic": 0.4,
+                "emission": 0.2,
+                "scale_y": 1.0,
+                "g": 0.85,
+                "scale_z": 1.0,
+                "b": 0.95
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 200.0
+            }
+        },
+        "instancer": {
+            "type": "Instancer3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "palette": 2.0,
+                "count": 125.0
+            },
+            "layout": {
+                "x": 560.0,
+                "y": 400.0
+            }
+        },
+        "light": {
+            "type": "Light3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "type": 0.0,
+                "r": 0.44802248,
+                "intensity": 1.3286557,
+                "g": 0.0,
+                "b": 0.2202485
+            },
+            "layout": {
+                "x": 561.7422,
+                "y": 761.33594
+            }
+        },
+        "merge": {
+            "type": "SceneMerge",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "layout": {
+                "x": 790.4336,
+                "y": 500.65234
+            }
+        },
+        "noise_px": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.4,
+                "seed": 11.0,
+                "offset": -4.0,
+                "count": 125.0,
+                "amplitude": 8.0
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 360.0
+            }
+        },
+        "noise_py": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.5,
+                "seed": 23.0,
+                "offset": -3.0,
+                "count": 125.0,
+                "amplitude": 6.0
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 460.0
+            }
+        },
+        "noise_pz": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.3,
+                "seed": 37.0,
+                "offset": -4.0,
+                "count": 125.0,
+                "amplitude": 8.0
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 560.0
+            }
+        },
+        "noise_rot": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.5,
+                "seed": 999.0,
+                "offset": 0.0,
+                "count": 125.0,
+                "amplitude": 1.5708
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 960.0
+            }
+        },
+        "noise_sx": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.8,
+                "seed": 42.0,
+                "offset": 0.5,
+                "count": 125.0,
+                "amplitude": 0.3
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 660.0
+            }
+        },
+        "noise_sy": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 1.2,
+                "seed": 137.0,
+                "offset": 0.5,
+                "count": 125.0,
+                "amplitude": 0.5
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 760.0
+            }
+        },
+        "noise_sz": {
+            "type": "SpreadNoise",
+            "params": {
+                "speed": 0.6,
+                "seed": 256.0,
+                "offset": 0.5,
+                "count": 125.0,
+                "amplitude": 0.3
+            },
+            "layout": {
+                "x": 30.0,
+                "y": 860.0
+            }
+        },
+        "render": {
+            "type": "Render3D",
+            "pkg": {
+                "name": "vivid-3d",
+                "version": "0.1.0"
+            },
+            "params": {
+                "cam_z": 12.0,
+                "bg_b": 0.06,
+                "cam_y": 7.0,
+                "cam_x": 7.0,
+                "bg_r": 0.02,
+                "bg_g": 0.02
+            },
+            "layout": {
+                "x": 978.7969,
+                "y": 528.8594
+            },
+            "resolution": [
+                1920,
+                1080
+            ]
+        },
+        "vout": {
+            "type": "video_out",
+            "layout": {
+                "x": 1380.0,
+                "y": 500.0
+            }
+        }
+    },
+    "connections": [
+        {
+            "from": "cube/scene",
+            "to": "instancer/scene"
+        },
+        {
+            "from": "noise_px/values",
+            "to": "adapter/pos_x"
+        },
+        {
+            "from": "noise_py/values",
+            "to": "adapter/pos_y"
+        },
+        {
+            "from": "noise_pz/values",
+            "to": "adapter/pos_z"
+        },
+        {
+            "from": "noise_sx/values",
+            "to": "adapter/scale_x"
+        },
+        {
+            "from": "noise_sy/values",
+            "to": "adapter/scale_y"
+        },
+        {
+            "from": "noise_sz/values",
+            "to": "adapter/scale_z"
+        },
+        {
+            "from": "noise_rot/values",
+            "to": "adapter/rot_y"
+        },
+        {
+            "from": "adapter/instances",
+            "to": "instancer/instances"
+        },
+        {
+            "from": "instancer/scene",
+            "to": "merge/scene_a"
+        },
+        {
+            "from": "light/scene",
+            "to": "merge/scene_b"
+        },
+        {
+            "from": "merge/scene",
+            "to": "render/scene"
+        },
+        {
+            "from": "render/texture",
+            "to": "bloom/input"
+        },
+        {
+            "from": "bloom/texture",
+            "to": "vout/input"
+        }
+    ],
+    "viewport": {
+        "pan_x": -14.0625,
+        "pan_y": -21.828125,
+        "zoom": 1.0
+    }
+}

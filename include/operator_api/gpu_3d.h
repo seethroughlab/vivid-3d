@@ -429,6 +429,17 @@ struct InstanceData3D {
 };
 static_assert(sizeof(InstanceData3D) == 48, "InstanceData3D must be 48 bytes");
 
+// Per-instance bundle: a read-only view over an array of InstanceData3D records.
+// Carried across ports via VIVID_PORT_TRANSPORT_CUSTOM_REF (shared handle, not memcpy).
+// The producer owns the underlying storage; consumers treat `data` as read-only
+// for the duration of a frame.
+struct InstanceArray3D {
+    const InstanceData3D* data;
+    uint32_t              count;
+    uint32_t              _pad0;
+};
+static_assert(sizeof(InstanceArray3D) == 8 + sizeof(void*), "InstanceArray3D layout");
+
 struct CustomCamera3D {
     float inverse_vp[16];   // mat4x4: screen UV → world ray
     float vp[16];           // mat4x4: world pos → clip (for frag_depth)
@@ -449,6 +460,11 @@ inline void scene_fragment_identity(VividSceneFragment& f) {
 VIVID_DECLARE_CUSTOM_REF_TYPE(vivid::gpu::VividSceneFragment,
                               "seethroughlab.vivid.scene_fragment_v1",
                               "VividSceneFragment",
+                              false);
+
+VIVID_DECLARE_CUSTOM_REF_TYPE(vivid::gpu::InstanceArray3D,
+                              "seethroughlab.vivid-3d.instance_array_v1",
+                              "InstanceArray3D",
                               false);
 
 namespace vivid::gpu {

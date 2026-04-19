@@ -1,6 +1,8 @@
 #include "operator_api/operator.h"
 #include "operator_api/gpu_operator.h"
 #include "operator_api/gpu_3d.h"
+#include "operator_api/thumbnail_instance_array.h"
+#include "operator_api/instance_algorithms.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -24,6 +26,7 @@
 struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Instancer3D";
     static constexpr bool kTimeDependent = false;
+    static constexpr VividLaneBehavior kLaneBehavior = VIVID_LANE_KERNEL;
 
     vivid::Param<int>   count   {"count",   16, 1, 4096};
     vivid::Param<int>   layout  {"layout",  0, {"Grid", "Circle", "Line", "Grid3D"}};
@@ -44,6 +47,8 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_INPUT));              // 0
+        // Legacy per-attribute lane-array inputs (kept for backward compat).
+        // Prefer the unified `instances` input below for new graphs.
         out.push_back({"positions", VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 1
         out.push_back({"scales",    VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 2
         out.push_back({"colors",    VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 3
@@ -51,7 +56,22 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
         out.push_back({"scale_y",   VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 5
         out.push_back({"scale_z",   VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 6
         out.push_back({"rotations", VIVID_PORT_LANE_ARRAY,  VIVID_PORT_INPUT});   // 7
+        // Unified per-instance data: one wire carrying N records of
+        // {position, rotation, scale, color}. Supersedes the legacy lane-array
+        // ports above when connected.
+        out.push_back(VIVID_CUSTOM_REF_PORT("instances", VIVID_PORT_INPUT,
+                                            vivid::gpu::InstanceArray3D));        // 8
         out.push_back(vivid::gpu::scene_port("scene", VIVID_PORT_OUTPUT));
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        static const char* kLayoutNames[] = { "Grid", "Circle", "Line", "Grid3D" };
+        int li = layout.int_value();
+        const char* label = (li >= 0 && li < 4) ? kLayoutNames[li] : "Grid";
+        vivid::thumb_instances::draw_scatter(
+            ctx, instances_.data(),
+            static_cast<uint32_t>(instances_.size()),
+            label);
     }
 
     void process_gpu(const VividGpuContext* ctx) override {
@@ -61,8 +81,38 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
         const auto* input = vivid::gpu::scene_input(ctx, 0);
         if (!input->vertex_buffer || input->index_count == 0) return;
 
-        // Read lanes (input port indices: scene=0, positions=1, scales=2, colors=3,
-        //   scale_x=4, scale_y=5, scale_z=6, rotations=7)
+        // Unified instances input — if connected, use it directly and skip the
+        // legacy lane-array + layout-preset path entirely.
+        const vivid::gpu::InstanceArray3D* bundle = nullptr;
+        if (ctx->custom_input_count > 1 && ctx->custom_inputs && ctx->custom_inputs[1]) {
+            bundle = static_cast<const vivid::gpu::InstanceArray3D*>(ctx->custom_inputs[1]);
+        }
+        if (bundle && bundle->data && bundle->count > 0) {
+            uint32_t n = bundle->count;
+            if (n > 4096) n = 4096;
+            instances_.assign(bundle->data, bundle->data + n);
+
+            uint32_t buf_size = n * sizeof(vivid::gpu::InstanceData3D);
+            if (buf_size < 48) buf_size = 48;
+            if (n != current_count_) {
+                rebuild_storage(ctx, n, buf_size);
+            }
+            if (storage_buf_) {
+                wgpuQueueWriteBuffer(ctx->queue, storage_buf_, 0,
+                                     instances_.data(),
+                                     n * sizeof(vivid::gpu::InstanceData3D));
+            }
+
+            fragment_ = *input;
+            fragment_.instance_buffer = storage_buf_;
+            fragment_.instance_count  = n;
+            ctx->custom_outputs[0] = &fragment_;
+            return;
+        }
+
+        // Legacy path — read lane-array inputs + apply layout preset.
+        // Input port indices: scene=0, positions=1, scales=2, colors=3,
+        //   scale_x=4, scale_y=5, scale_z=6, rotations=7, instances=8 (handled above)
         const float* pos_data = nullptr;
         uint32_t pos_len = 0;
         const float* scale_data = nullptr;
@@ -130,54 +180,38 @@ struct Instancer3D : vivid::OperatorBase, vivid::GpuProcessable {
                 instances_[i].position[2] = pos_data[i * 3 + 2];
             }
         } else {
-            switch (layout_mode) {
-                case 1: { // Circle
-                    for (uint32_t i = 0; i < n; ++i) {
-                        float angle = 6.28318530718f * static_cast<float>(i) / static_cast<float>(n);
-                        float radius = sp * static_cast<float>(n) / 6.28318530718f;
-                        if (radius < sp) radius = sp;
-                        instances_[i].position[0] = radius * std::cos(angle);
+            // Layout math lives in instance_algorithms.h.
+            // 3D lays Grid/Circle/Line in the XZ plane (y-up floor); Grid3D is cubic.
+            for (uint32_t i = 0; i < n; ++i) {
+                switch (layout_mode) {
+                    case 1: {
+                        auto p = vivid::instancing::circle_2d(i, n, sp);
+                        instances_[i].position[0] = p.x;
                         instances_[i].position[1] = 0.0f;
-                        instances_[i].position[2] = radius * std::sin(angle);
+                        instances_[i].position[2] = p.y;
+                        break;
                     }
-                    break;
-                }
-                case 2: { // Line
-                    float total = sp * static_cast<float>(n - 1);
-                    float start = -total * 0.5f;
-                    for (uint32_t i = 0; i < n; ++i) {
-                        instances_[i].position[0] = start + sp * static_cast<float>(i);
+                    case 2: {
+                        auto p = vivid::instancing::line_2d(i, n, sp);
+                        instances_[i].position[0] = p.x;
                         instances_[i].position[1] = 0.0f;
                         instances_[i].position[2] = 0.0f;
+                        break;
                     }
-                    break;
-                }
-                case 3: { // Grid3D — cubic lattice
-                    uint32_t dim = static_cast<uint32_t>(std::ceil(std::cbrt(static_cast<float>(n))));
-                    float offset = -static_cast<float>(dim - 1) * sp * 0.5f;
-                    for (uint32_t i = 0; i < n; ++i) {
-                        uint32_t xi = i % dim;
-                        uint32_t yi = (i / dim) % dim;
-                        uint32_t zi = i / (dim * dim);
-                        instances_[i].position[0] = offset + static_cast<float>(xi) * sp;
-                        instances_[i].position[1] = offset + static_cast<float>(yi) * sp;
-                        instances_[i].position[2] = offset + static_cast<float>(zi) * sp;
+                    case 3: {
+                        auto p = vivid::instancing::grid_3d(i, n, sp);
+                        instances_[i].position[0] = p.x;
+                        instances_[i].position[1] = p.y;
+                        instances_[i].position[2] = p.z;
+                        break;
                     }
-                    break;
-                }
-                default: { // Grid (2D)
-                    uint32_t cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(n))));
-                    uint32_t rows = (n + cols - 1) / cols;
-                    float ox = -static_cast<float>(cols - 1) * sp * 0.5f;
-                    float oz = -static_cast<float>(rows - 1) * sp * 0.5f;
-                    for (uint32_t i = 0; i < n; ++i) {
-                        uint32_t col = i % cols;
-                        uint32_t row = i / cols;
-                        instances_[i].position[0] = ox + static_cast<float>(col) * sp;
+                    default: {
+                        auto p = vivid::instancing::grid_2d(i, n, sp);
+                        instances_[i].position[0] = p.x;
                         instances_[i].position[1] = 0.0f;
-                        instances_[i].position[2] = oz + static_cast<float>(row) * sp;
+                        instances_[i].position[2] = p.y;
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -294,5 +328,6 @@ private:
 };
 
 VIVID_REGISTER(Instancer3D)
+VIVID_THUMBNAIL(Instancer3D)
 
-VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)
+VIVID_DESCRIBE_REF_TYPES2(vivid::gpu::VividSceneFragment, vivid::gpu::InstanceArray3D)

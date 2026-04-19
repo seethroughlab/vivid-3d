@@ -25,6 +25,9 @@
     "gpu/mesh_import",
     "gpu/deformer",
     "gpu/instancer3d",
+    "gpu/instance_grid",
+    "gpu/instance_noise",
+    "gpu/instances_from_lanes",
     "gpu/particles3d",
     "gpu/sdf3d",
     "gpu/material3d",
@@ -54,7 +57,9 @@
       "graphs/3d_hello_world_demo.json",
       "graphs/3d_shapes_demo.json",
       "graphs/3d_materials_demo.json",
-      "graphs/3d_particles_demo.json"
+      "graphs/3d_particles_demo.json",
+      "graphs/3d_instancer_demo.json",
+      "graphs/3d_instancer_from_lanes_demo.json"
     ],
     "cpp": []
   },

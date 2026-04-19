@@ -126,6 +126,9 @@ add_3d_operator(mesh_import   operators/gpu/mesh_import/mesh_import.cpp
         ${VIVID_SRC_DIR}/deps/stb)
 add_3d_operator(deformer      operators/gpu/deformer/deformer.cpp)
 add_3d_operator(instancer3d   operators/gpu/instancer3d/instancer3d.cpp)
+add_3d_operator(instance_grid operators/gpu/instance_grid/instance_grid.cpp)
+add_3d_operator(instance_noise operators/gpu/instance_noise/instance_noise.cpp)
+add_3d_operator(instances_from_lanes operators/gpu/instances_from_lanes/instances_from_lanes.cpp)
 add_3d_operator(particles3d   operators/gpu/particles3d/particles3d.cpp)
 add_3d_operator(sdf3d         operators/gpu/sdf3d/sdf3d.cpp)
 add_3d_operator(material3d    operators/gpu/material3d/material3d.cpp)
@@ -157,7 +160,7 @@ add_3d_operator(boolean3d operators/gpu/boolean3d/boolean3d.cpp EXTRA_LIBS manif
 add_custom_target(operators DEPENDS
     grid sphere box point_cloud mesh_draw
     render_3d shape3d transform3d scene_merge light3d mesh_import
-    deformer instancer3d particles3d sdf3d material3d ssao3d dof3d
+    deformer instancer3d instance_grid instance_noise instances_from_lanes particles3d sdf3d material3d ssao3d dof3d
     environment3d boolean3d depth_mask3d mesh_builder sweep orbit_camera)
 
 # --- Tests ---
