@@ -1,6 +1,10 @@
 #include "operator_api/operator.h"
 #include "operator_api/input_state.h"
+#include "operator_api/thumbnail.h"
+#include "operator_api/draw_plot_helpers.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 struct OrbitCamera : vivid::OperatorBase, vivid::FrameProcessable {
     static constexpr const char* kName   = "OrbitCamera";
@@ -65,6 +69,92 @@ struct OrbitCamera : vivid::OperatorBase, vivid::FrameProcessable {
         out.push_back({"target_x", VIVID_PORT_SCALAR, VIVID_PORT_OUTPUT});
         out.push_back({"target_y", VIVID_PORT_SCALAR, VIVID_PORT_OUTPUT});
         out.push_back({"target_z", VIVID_PORT_SCALAR, VIVID_PORT_OUTPUT});
+    }
+
+    void draw_thumbnail(const VividThumbnailContext* ctx) override {
+        if (!ctx || !ctx->draw.opaque) return;
+        VividDrawAPI d = ctx->draw;
+        void* o = d.opaque;
+
+        float w = static_cast<float>(ctx->thumbnail_logical_width
+                                         ? ctx->thumbnail_logical_width
+                                         : ctx->thumbnail_width);
+        float h = static_cast<float>(ctx->thumbnail_logical_height
+                                         ? ctx->thumbnail_logical_height
+                                         : ctx->thumbnail_height);
+
+        vivid::draw_plot::draw_thumb_background(d, o, w, h);
+        vivid::draw_plot::draw_thumb_label(d, o, 6.0f, 3.0f, "Orbit");
+
+        char badge[16];
+        std::snprintf(badge, sizeof(badge), "d%.1f", distance_);
+        float bw = d.text_width ? d.text_width(o, badge, 0.8f) : 24.0f;
+        vivid::draw_plot::draw_thumb_value(d, o, w - bw - 6.0f, 3.0f, bw, badge);
+
+        // Disc centered in the body area below the label row.
+        float body_top = 18.0f;
+        float body_h = h - body_top - 4.0f;
+        float disc_r = std::min(w - 12.0f, body_h) * 0.5f - 3.0f;
+        if (disc_r < 8.0f) disc_r = 8.0f;
+        float cx = w * 0.5f;
+        float cy = body_top + body_h * 0.5f;
+
+        // Disc background (filled circle via rounded-rect with full-corner radius).
+        d.draw_rounded_rect(o, cx - disc_r, cy - disc_r,
+                            disc_r * 2.0f, disc_r * 2.0f, disc_r,
+                            VividColor{0.12f, 0.14f, 0.17f, 1.0f});
+
+        // Compass ticks at N/E/S/W.
+        VividColor tick = {0.30f, 0.35f, 0.42f, 0.85f};
+        float tick_in  = disc_r - 4.0f;
+        float tick_out = disc_r;
+        for (int i = 0; i < 4; ++i) {
+            float a = static_cast<float>(i) * 1.5707963f; // 90° steps
+            float dx = std::cos(a), dy = -std::sin(a);
+            d.draw_line(o,
+                        cx + dx * tick_in, cy + dy * tick_in,
+                        cx + dx * tick_out, cy + dy * tick_out,
+                        1.0f, tick);
+        }
+
+        // Target crosshair when the orbit pivot is offset from origin.
+        // Project (target_x, target_z) onto the disc, compressed by tanh so a
+        // distant target still sits somewhere visible rather than off-edge.
+        if (std::fabs(tgt_[0]) > 0.01f || std::fabs(tgt_[2]) > 0.01f) {
+            float denom = distance_ + 0.1f;
+            float nx =  std::tanh(tgt_[0] / denom);
+            float nz = -std::tanh(tgt_[2] / denom); // +Z world → up on disc
+            float ox = nx * disc_r * 0.6f;
+            float oy = nz * disc_r * 0.6f;
+            float off = std::sqrt(ox * ox + oy * oy);
+            float lim = disc_r * 0.85f;
+            if (off > lim) { float s = lim / off; ox *= s; oy *= s; }
+            float tcx = cx + ox;
+            float tcy = cy + oy;
+            VividColor cross = {0.55f, 0.62f, 0.72f, 0.75f};
+            d.draw_line(o, tcx - 3.0f, tcy, tcx + 3.0f, tcy, 1.0f, cross);
+            d.draw_line(o, tcx, tcy - 3.0f, tcx, tcy + 3.0f, 1.0f, cross);
+        }
+
+        // Centre dot marks the orbit origin on the disc.
+        d.draw_rounded_rect(o, cx - 1.5f, cy - 1.5f, 3.0f, 3.0f, 1.5f,
+                            VividColor{0.55f, 0.62f, 0.72f, 0.9f});
+
+        // Camera dot: polar (r = |cos(el)|·disc_r, angle = az CCW on screen).
+        float rcam = std::fabs(std::cos(elevation_rad_)) * disc_r;
+        float sa = std::sin(azimuth_rad_);
+        float ca = std::cos(azimuth_rad_);
+        float px = cx + ca * rcam;
+        float py = cy - sa * rcam;
+
+        // Look-direction line.
+        VividColor line_col = {1.0f, 0.78f, 0.31f, 0.85f};
+        d.draw_line(o, cx, cy, px, py, 1.2f, line_col);
+
+        // Camera dot.
+        float dotr = 3.5f;
+        d.draw_rounded_rect(o, px - dotr, py - dotr, dotr * 2.0f, dotr * 2.0f, dotr,
+                            VividColor{1.0f, 0.85f, 0.45f, 1.0f});
     }
 
     void write_outputs(const VividFrameContext* ctx) {
@@ -160,3 +250,4 @@ struct OrbitCamera : vivid::OperatorBase, vivid::FrameProcessable {
 };
 
 VIVID_REGISTER(OrbitCamera)
+VIVID_THUMBNAIL(OrbitCamera)

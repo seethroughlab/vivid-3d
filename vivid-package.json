@@ -39,7 +39,9 @@
     "gpu/mesh_builder",
     "gpu/sweep"
   ],
-  "operators": [],
+  "operators": [
+    "control/orbit_camera"
+  ],
   "dependencies": {
     "vendor": [
       {
