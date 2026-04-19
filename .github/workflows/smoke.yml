@@ -30,25 +30,41 @@ jobs:
       - name: Build test_demo_graphs and vivid core operators
         run: cmake --build ${{ github.workspace }}/../vivid/build --target test_demo_graphs operators -j$(sysctl -n hw.logicalcpu)
 
-      - name: Detect package build arch from vivid-core
+      - name: Stage wgpu_native dylib for package build
+        # vivid-core's FetchContent may download both arm64 and x86_64 wgpu
+        # releases side-by-side under _deps/. vivid-3d's CMake prefers the
+        # libwgpu_native.dylib inside the vivid app bundle, so we explicitly
+        # copy the host-arch dylib there to avoid its fallback glob picking
+        # the wrong arch (silent linker failure: "required architecture arm64,
+        # found x86_64").
         run: |
-          wgpu_lib=$(find "${{ github.workspace }}/../vivid/build/_deps" -type f -name libwgpu_native.dylib 2>/dev/null | head -n 1)
-          if [ -z "$wgpu_lib" ]; then
-            echo "Failed to locate libwgpu_native.dylib in vivid-core build" >&2
-            find "${{ github.workspace }}/../vivid/build/_deps" -maxdepth 4 -type f | sed -n '1,200p' >&2
+          host_arch=$(uname -m)
+          case "$host_arch" in
+            arm64)  wgpu_arch_tag=aarch64 ;;
+            x86_64) wgpu_arch_tag=x86_64 ;;
+            *)
+              echo "Unsupported host arch: $host_arch" >&2
+              exit 1
+              ;;
+          esac
+
+          deps_dir="${{ github.workspace }}/../vivid/build/_deps"
+          wgpu_dir=$(find "$deps_dir" -maxdepth 1 -type d -name "wgpu-macos-${wgpu_arch_tag}-*-src" | head -n 1)
+          if [ -z "$wgpu_dir" ] || [ ! -f "$wgpu_dir/lib/libwgpu_native.dylib" ]; then
+            echo "Failed to locate libwgpu_native.dylib for arch=$wgpu_arch_tag in $deps_dir" >&2
+            find "$deps_dir" -maxdepth 2 -type d >&2 || true
             exit 1
           fi
-          wgpu_archs=$(lipo -archs "$wgpu_lib")
+
+          wgpu_lib="$wgpu_dir/lib/libwgpu_native.dylib"
           echo "Using libwgpu_native: $wgpu_lib"
-          echo "Detected libwgpu_native arch(s): $wgpu_archs"
-          if [[ "$wgpu_archs" == *"arm64"* ]]; then
-            echo "VIVID_OSX_ARCH=arm64" >> $GITHUB_ENV
-          elif [[ "$wgpu_archs" == *"x86_64"* ]]; then
-            echo "VIVID_OSX_ARCH=x86_64" >> $GITHUB_ENV
-          else
-            echo "Unsupported libwgpu_native architectures: $wgpu_archs" >&2
-            exit 1
-          fi
+
+          # Stage the dylib where vivid-3d's CMakeLists.txt checks first.
+          macos_dir="${{ github.workspace }}/../vivid/build/vivid.app/Contents/MacOS"
+          mkdir -p "$macos_dir"
+          cp "$wgpu_lib" "$macos_dir/libwgpu_native.dylib"
+
+          echo "VIVID_OSX_ARCH=$host_arch" >> $GITHUB_ENV
 
       - name: Configure package
         run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }} -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build -DVIVID_PACKAGE_BUILD_TESTS=ON
