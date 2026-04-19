@@ -60,8 +60,7 @@
       "graphs/3d_shapes_demo.json",
       "graphs/3d_materials_demo.json",
       "graphs/3d_particles_demo.json",
-      "graphs/3d_instancer_demo.json",
-      "graphs/3d_instancer_from_lanes_demo.json"
+      "graphs/3d_instancer_demo.json"
     ],
     "cpp": []
   },
