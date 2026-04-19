@@ -49,10 +49,6 @@
                 "name": "vivid-3d",
                 "version": "0.1.0"
             },
-            "params": {
-                "palette": 2.0,
-                "count": 125.0
-            },
             "layout": {
                 "x": 560.0,
                 "y": 400.0
