@@ -2,7 +2,7 @@
   "nodes": {
     "torus":     { "type": "Shape3D", "params": { "shape": 2, "r": 0.8, "g": 0.4, "b": 1.0 } },
     "transform": { "type": "Transform3D" },
-    "lfo":       { "type": "LFO", "params": { "frequency": 0.2, "amplitude": 6.28, "offset": 0.0 } },
+    "lfo":       { "type": "LfoFr", "params": { "frequency": 0.2, "amplitude": 6.28, "offset": 0.0 } },
     "light":     { "type": "Light3D", "params": { "type": 0, "intensity": 1.2 } },
     "merge":     { "type": "SceneMerge" },
     "orbit_cam": { "type": "OrbitCamera", "params": { "distance": 5.4, "azimuth": 0, "elevation": 22 } },

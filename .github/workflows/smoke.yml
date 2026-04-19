@@ -66,6 +66,12 @@ jobs:
 
           echo "VIVID_OSX_ARCH=$host_arch" >> $GITHUB_ENV
 
+      - name: Reset package build dir
+        # Self-hosted runners keep the workspace between runs; stale dylibs
+        # from a previous run (or a previous arch) can linger in build/ and
+        # get copied into the vivid/build tree in a later step. Start fresh.
+        run: rm -rf build
+
       - name: Configure package
         # VIVID_PACKAGE_BUILD_TESTS is intentionally off: the package's
         # tests/ C++ units include vivid-core runtime headers at their old
