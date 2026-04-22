@@ -129,10 +129,10 @@ struct Vertex3D {
 // The returned layout references a static attributes array (program-lifetime).
 inline WGPUVertexBufferLayout vertex3d_layout() {
     static WGPUVertexAttribute attrs[] = {
-        { WGPUVertexFormat_Float32x3, 0,                           0 }, // position
-        { WGPUVertexFormat_Float32x3, 3 * sizeof(float),           1 }, // normal
-        { WGPUVertexFormat_Float32x4, 6 * sizeof(float),           2 }, // tangent
-        { WGPUVertexFormat_Float32x2, 10 * sizeof(float),          3 }, // uv
+        { nullptr, WGPUVertexFormat_Float32x3, 0,                           0 }, // position
+        { nullptr, WGPUVertexFormat_Float32x3, 3 * sizeof(float),           1 }, // normal
+        { nullptr, WGPUVertexFormat_Float32x4, 6 * sizeof(float),           2 }, // tangent
+        { nullptr, WGPUVertexFormat_Float32x2, 10 * sizeof(float),          3 }, // uv
     };
     WGPUVertexBufferLayout layout{};
     layout.arrayStride = sizeof(Vertex3D);

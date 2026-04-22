@@ -3,6 +3,9 @@
 #include "operator_api/gpu_3d.h"
 #include "operator_api/thumbnail.h"
 #include "operator_api/draw_plot_helpers.h"
+#include "operator_api/draw_ui_helpers.h"
+#include "operator_api/editor_ui.h"
+#include "operator_api/editor_keys.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -370,6 +373,23 @@ struct Particles3D : vivid::OperatorBase, vivid::GpuProcessable {
 
     // Learning mode
     vivid::Param<int> learning_mode {"learning_mode", 0, {"Advanced", "Beginner"}};
+
+    // Editor UI state: one SliderState per numeric param, plus a cluster
+    // collapse bitmask for future use. Public so tests can arrange.
+    //
+    // Slider slot ordering (matches the cluster layout in draw_editor):
+    //   0..2  Emission: count, emission_rate, lifetime
+    //   3..6  Physics:  speed, gravity, spread, drag
+    //   7..10 Curl Noise: curl_strength, noise_scale, noise_speed, noise_octaves
+    //   11..13 Appearance: elongation, size, bounds
+    //   14..17 Color: r, g, b, a
+    //   18     Material: emission
+    static constexpr int kSliderCount = 19;
+    vivid::ui::SliderState editor_sliders_[kSliderCount] = {};
+
+    // Editor entry points (definitions live just below the struct body).
+    static VividEditorMetadata editor_metadata();
+    void draw_editor(VividEditorContext* ctx);
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         vivid::param_group(learning_mode, "Learning");
@@ -950,7 +970,226 @@ private:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Dedicated editor window — cluster-organized slider layout
+//
+// The existing inspector surfaces all 18+ params as a flat scrolling knob
+// list. The editor groups them into named clusters (Emission, Physics,
+// Curl Noise, Appearance, Color, Material, Learning) arranged in two
+// columns and renders each numeric param as a full-width horizontal
+// slider. Color gets a 4-channel swatch row. Enum params use radio
+// buttons. Live parameter changes flow through commands.set_param and
+// update the graph immediately.
+//
+// Live 3D preview is deferred — the platform doesn't expose an
+// editor-owned 3D viewport yet (see candidates/particles3d.md §"Preview
+// mechanism"). The cluster-organized layout is the primary UX win
+// relative to the flat inspector knob grid.
+// ---------------------------------------------------------------------------
+
+VividEditorMetadata Particles3D::editor_metadata() {
+    VividEditorMetadata m{};
+    m.default_width  = 1100;
+    m.default_height = 640;
+    m.min_width      = 800;
+    m.min_height     = 480;
+    m.title_suffix   = "Particles3D Editor";
+    return m;
+}
+
+namespace {
+
+constexpr float kEditorInset      = 8.0f;
+constexpr float kEditorTopBarH    = 32.0f;
+constexpr float kEditorRowH       = 22.0f;
+constexpr float kEditorClusterGap = 14.0f;
+constexpr float kEditorHeaderH    = 20.0f;
+
+// Draw a cluster header (a dim separator bar with the cluster title).
+void draw_cluster_header(VividEditorContext* ctx, vivid::ui::Rect r,
+                         const char* title) {
+    auto& d = ctx->draw;
+    void* o = d.opaque;
+    const auto& th = ctx->theme;
+    if (d.draw_rect) {
+        d.draw_rect(o, r.x, r.y + r.h - 1.0f, r.w, 1.0f,
+            {th.separator.r, th.separator.g, th.separator.b, 0.6f});
+    }
+    if (d.draw_text) {
+        d.draw_text(o, r.x + 2.0f, r.y + 2.0f, title,
+            {th.bright_text.r, th.bright_text.g,
+             th.bright_text.b, 0.95f}, 0.9f);
+    }
+}
+
+} // namespace
+
+void Particles3D::draw_editor(VividEditorContext* ctx) {
+    if (!ctx) return;
+
+    namespace ui = vivid::ui;
+
+    auto& d = ctx->draw;
+    void* o = d.opaque;
+    const auto& th = ctx->theme;
+
+    auto set_named = [&](const char* name, float v) {
+        if (ctx->commands.set_param)
+            ctx->commands.set_param(ctx->commands.opaque, name, v);
+    };
+
+    ctx->wants_keyboard = 1;
+
+    const float surf_w = ctx->surface_width;
+    const float surf_h = ctx->surface_height;
+
+    // Top bar.
+    if (d.draw_text) {
+        d.draw_text(o, kEditorInset + 4.0f, kEditorInset + 8.0f,
+            "Particles3D",
+            {th.bright_text.r, th.bright_text.g,
+             th.bright_text.b, 0.95f}, 1.0f);
+        const char* hints =
+            "drag sliders to edit  ·  click radio for enums  ·  "
+            "set_param flows through immediately";
+        const float scale = 0.7f;
+        const float hints_w = d.text_width
+            ? d.text_width(o, hints, scale) : 520.0f;
+        d.draw_text(o, surf_w - kEditorInset - hints_w,
+            kEditorInset + 10.0f, hints,
+            {th.dim_text.r, th.dim_text.g, th.dim_text.b, 0.7f}, scale);
+    }
+
+    // Body region: two columns of clusters.
+    const float body_x = kEditorInset;
+    const float body_y = kEditorInset + kEditorTopBarH + kEditorInset;
+    const float body_w = std::max(0.0f, surf_w - 2.0f * kEditorInset);
+    const float body_h = std::max(0.0f, surf_h - body_y - kEditorInset);
+
+    vivid::draw_ui::draw_panel(d, o, body_x, body_y, body_w, body_h,
+        {th.dark_bg.r, th.dark_bg.g, th.dark_bg.b, 0.92f},
+        {th.separator.r, th.separator.g, th.separator.b, 0.5f}, 4.0f, 1.0f);
+
+    auto body = ui::Rect{body_x, body_y, body_w, body_h};
+    auto body_inset = ui::ui_pad(body, 12.0f);
+    auto split = ui::ui_split_h(body_inset, 0.5f, 18.0f);
+    auto left  = ui::LayoutCursor{split.first,  0.0f, 6.0f};
+    left.cursor_x = split.first.x;
+    left.cursor_y = split.first.y;
+    left.remaining_w = split.first.w;
+    left.remaining_h = split.first.h;
+    auto right = ui::LayoutCursor{split.second, 0.0f, 6.0f};
+    right.cursor_x = split.second.x;
+    right.cursor_y = split.second.y;
+    right.remaining_w = split.second.w;
+    right.remaining_h = split.second.h;
+
+    auto slider_int = [&](ui::LayoutCursor& c, int slot, const char* label,
+                          const char* param_name, int cur, int lo, int hi) {
+        auto row = ui::ui_row(c, kEditorRowH);
+        auto r = ui::ui_slider_h(*ctx, row, label,
+            static_cast<float>(cur),
+            static_cast<float>(lo), static_cast<float>(hi),
+            &editor_sliders_[slot]);
+        if (r.changed) {
+            const int iv = std::clamp(
+                static_cast<int>(std::lround(r.value)), lo, hi);
+            set_named(param_name, static_cast<float>(iv));
+        }
+    };
+    auto slider_float = [&](ui::LayoutCursor& c, int slot, const char* label,
+                            const char* param_name,
+                            float cur, float lo, float hi) {
+        auto row = ui::ui_row(c, kEditorRowH);
+        auto r = ui::ui_slider_h(*ctx, row, label, cur, lo, hi,
+            &editor_sliders_[slot]);
+        if (r.changed) set_named(param_name, r.value);
+    };
+    auto cluster_gap = [&](ui::LayoutCursor& c) {
+        ui::ui_row(c, kEditorClusterGap - 6.0f);
+    };
+
+    // ===== LEFT COLUMN =====
+
+    draw_cluster_header(ctx, ui::ui_row(left, kEditorHeaderH), "Emission");
+    slider_int  (left, 0, "Count",         "count",         count.int_value(),        1, 100000);
+    slider_float(left, 1, "Rate",          "emission_rate", emission_rate.value, 0.0f, 10000.0f);
+    slider_float(left, 2, "Lifetime",      "lifetime",      lifetime.value,       0.1f, 30.0f);
+    cluster_gap(left);
+
+    draw_cluster_header(ctx, ui::ui_row(left, kEditorHeaderH), "Physics");
+    slider_float(left, 3, "Speed",         "speed",   speed.value,    0.0f, 20.0f);
+    slider_float(left, 4, "Gravity",       "gravity", gravity.value, -20.0f, 20.0f);
+    slider_float(left, 5, "Spread (deg)",  "spread",  spread.value,   0.0f, 360.0f);
+    slider_float(left, 6, "Drag",          "drag",    drag.value,     0.0f, 10.0f);
+    cluster_gap(left);
+
+    draw_cluster_header(ctx, ui::ui_row(left, kEditorHeaderH), "Curl Noise");
+    slider_float(left, 7,  "Strength",      "curl_strength",  curl_strength.value,  0.0f, 20.0f);
+    slider_float(left, 8,  "Scale",         "noise_scale",    noise_scale.value,    0.01f, 10.0f);
+    slider_float(left, 9,  "Speed",         "noise_speed",    noise_speed.value,    0.0f, 5.0f);
+    slider_int  (left, 10, "Octaves",       "noise_octaves",  noise_octaves.int_value(), 1, 4);
+
+    // ===== RIGHT COLUMN =====
+
+    draw_cluster_header(ctx, ui::ui_row(right, kEditorHeaderH), "Appearance");
+    {
+        // Shape: two-option radio (Billboard / Cuboid).
+        auto row = ui::ui_row(right, kEditorRowH + 4.0f);
+        static const char* kShapeLabels[2] = {"Billboard", "Cuboid"};
+        auto r = ui::ui_radio(*ctx, row, kShapeLabels, 2, shape.int_value());
+        if (r.clicked) set_named("shape", static_cast<float>(r.value));
+    }
+    slider_float(right, 11, "Elongation", "elongation", elongation.value, 1.0f, 20.0f);
+    slider_float(right, 12, "Size",       "size",       size.value,       0.01f, 2.0f);
+    slider_float(right, 13, "Bounds",     "bounds",     bounds.value,     1.0f, 200.0f);
+    cluster_gap(right);
+
+    draw_cluster_header(ctx, ui::ui_row(right, kEditorHeaderH), "Color");
+    slider_float(right, 14, "R", "r", r.value, 0.0f, 1.0f);
+    slider_float(right, 15, "G", "g", g.value, 0.0f, 1.0f);
+    slider_float(right, 16, "B", "b", b.value, 0.0f, 1.0f);
+    slider_float(right, 17, "A", "a", a.value, 0.0f, 1.0f);
+    {
+        // Color swatch: filled rect showing current rgba.
+        auto row = ui::ui_row(right, 22.0f);
+        if (d.draw_rect) {
+            // Background/transparency chequer substitute: dim track.
+            d.draw_rect(o, row.x, row.y, row.w, row.h,
+                {0.12f, 0.12f, 0.13f, 1.0f});
+            d.draw_rect(o, row.x + 2.0f, row.y + 2.0f,
+                row.w - 4.0f, row.h - 4.0f,
+                {this->r.value, this->g.value, this->b.value, this->a.value});
+        }
+        if (d.draw_text) {
+            d.draw_text(o, row.x + 8.0f, row.y + 4.0f, "Preview",
+                {th.bright_text.r, th.bright_text.g,
+                 th.bright_text.b, 0.8f}, 0.7f);
+        }
+    }
+    cluster_gap(right);
+
+    draw_cluster_header(ctx, ui::ui_row(right, kEditorHeaderH), "Material");
+    slider_float(right, 18, "Emission", "emission", emission.value, 0.0f, 5.0f);
+    {
+        auto row = ui::ui_row(right, kEditorRowH + 4.0f);
+        static const char* kUnlitLabels[2] = {"Lit", "Unlit"};
+        auto rr = ui::ui_radio(*ctx, row, kUnlitLabels, 2, unlit.int_value());
+        if (rr.clicked) set_named("unlit", static_cast<float>(rr.value));
+    }
+    cluster_gap(right);
+
+    draw_cluster_header(ctx, ui::ui_row(right, kEditorHeaderH), "Learning mode");
+    {
+        auto row = ui::ui_row(right, kEditorRowH + 4.0f);
+        static const char* kLearningLabels[2] = {"Advanced", "Beginner"};
+        auto rr = ui::ui_radio(*ctx, row, kLearningLabels, 2, learning_mode.int_value());
+        if (rr.clicked) set_named("learning_mode", static_cast<float>(rr.value));
+    }
+}
+
 VIVID_REGISTER(Particles3D)
 VIVID_THUMBNAIL(Particles3D)
+VIVID_EDITOR(Particles3D)
 
 VIVID_DESCRIBE_REF_TYPE(vivid::gpu::VividSceneFragment)
