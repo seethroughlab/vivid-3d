@@ -21,7 +21,7 @@
 // Input ports:
 //   "mesh"       VIVID_CUSTOM_PORT     (required) — geometry to draw
 //   "transforms" VIVID_CUSTOM_PORT  (optional) — per-instance vec4 transforms
-//   "positions"  VIVID_PORT_LANE_ARRAY (fallback) — [x0,y0, x1,y1, ...] pairs
+//   "positions"  many-value (VIVID_MULTIPLICITY_MANY) fallback — [x0,y0, x1,y1, ...] pairs
 //
 // Output: "texture" VIVID_PORT_TEXTURE
 //
@@ -97,7 +97,7 @@ struct MeshDraw : vivid::OperatorBase, vivid::GpuProcessable {
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
         out.push_back(VIVID_CUSTOM_REF_PORT("mesh",       VIVID_PORT_INPUT, VividMesh));
         out.push_back(VIVID_CUSTOM_REF_PORT("transforms", VIVID_PORT_INPUT, VividComputeBuffer));
-        out.push_back({"positions",  VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});
+        out.push_back({.name="positions", .type=VIVID_PORT_SCALAR, .direction=VIVID_PORT_INPUT, .multiplicity=VIVID_MULTIPLICITY_MANY});
         out.push_back({"texture",    VIVID_PORT_TEXTURE,    VIVID_PORT_OUTPUT});
     }
 
@@ -137,9 +137,9 @@ struct MeshDraw : vivid::OperatorBase, vivid::GpuProcessable {
             // Positions lane fallback: [x0,y0, x1,y1, ...]
             uint32_t    lane_len  = 0;
             const float* lane_data = nullptr;
-            if (ctx->input_lanes && ctx->input_lanes[2].length > 0) {
-                lane_len  = ctx->input_lanes[2].length;
-                lane_data = ctx->input_lanes[2].data;
+            if (ctx->values && vivid_value_count(&ctx->values[2]) > 0) {
+                lane_len  = vivid_value_count(&ctx->values[2]);
+                lane_data = vivid_value_floats(&ctx->values[2]);
             }
             instance_count = lane_len / 2;
             if (instance_count == 0) instance_count = 1;  // one instance at origin

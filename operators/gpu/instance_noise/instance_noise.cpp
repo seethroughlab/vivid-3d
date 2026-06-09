@@ -28,7 +28,7 @@
 struct InstanceNoise : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName         = "InstanceNoise";
     static constexpr bool kTimeDependent       = true;
-    static constexpr VividLaneBehavior kLaneBehavior = VIVID_LANE_POINTWISE;
+    // POINTWISE → Map is the default multiplicity behavior; no explicit declaration needed.
 
     vivid::Param<float> position_jitter {"position_jitter", 0.0f, 0.0f, 10.0f};
     vivid::Param<float> rotation_jitter {"rotation_jitter", 0.0f, 0.0f, 6.2832f};

@@ -24,23 +24,26 @@
 struct InstancesFromLanes : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName         = "InstancesFromLanes";
     static constexpr bool kTimeDependent       = false;
-    static constexpr VividLaneBehavior kLaneBehavior = VIVID_LANE_KERNEL;
+    static constexpr VividMultiplicityBehavior kMultiplicityBehavior = VIVID_MULTIPLICITY_KERNEL;
 
     void collect_params(std::vector<vivid::ParamBase*>& /*out*/) override {}
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        // 11 optional lane-array inputs, fixed order:
-        out.push_back({"pos_x",   VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 0
-        out.push_back({"pos_y",   VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 1
-        out.push_back({"pos_z",   VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 2
-        out.push_back({"scale_x", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 3
-        out.push_back({"scale_y", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 4
-        out.push_back({"scale_z", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 5
-        out.push_back({"rot_y",   VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 6
-        out.push_back({"color_r", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 7
-        out.push_back({"color_g", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 8
-        out.push_back({"color_b", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 9
-        out.push_back({"color_a", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});  // 10
+        // 11 optional many-value inputs, fixed order:
+        auto many_in = [&](const char* name) {
+            out.push_back({.name=name, .type=VIVID_PORT_SCALAR, .direction=VIVID_PORT_INPUT, .multiplicity=VIVID_MULTIPLICITY_MANY});
+        };
+        many_in("pos_x");   // 0
+        many_in("pos_y");   // 1
+        many_in("pos_z");   // 2
+        many_in("scale_x"); // 3
+        many_in("scale_y"); // 4
+        many_in("scale_z"); // 5
+        many_in("rot_y");   // 6
+        many_in("color_r"); // 7
+        many_in("color_g"); // 8
+        many_in("color_b"); // 9
+        many_in("color_a"); // 10
 
         out.push_back(VIVID_CUSTOM_REF_PORT("instances", VIVID_PORT_OUTPUT,
                                             vivid::gpu::InstanceArray3D));
@@ -58,11 +61,12 @@ struct InstancesFromLanes : vivid::OperatorBase, vivid::GpuProcessable {
         const float* in_data[11]{};
         uint32_t     in_len [11]{};
 
-        if (ctx->input_lanes) {
+        if (ctx->values) {
             for (int p = 0; p < 11; ++p) {
-                if (ctx->input_lanes[p].length > 0) {
-                    in_data[p] = ctx->input_lanes[p].data;
-                    in_len [p] = ctx->input_lanes[p].length;
+                uint32_t len = vivid_value_count(&ctx->values[p]);
+                if (len > 0) {
+                    in_data[p] = vivid_value_floats(&ctx->values[p]);
+                    in_len [p] = len;
                 }
             }
         }

@@ -24,7 +24,7 @@
 struct InstanceGrid : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName         = "InstanceGrid";
     static constexpr bool kTimeDependent       = false;
-    static constexpr VividLaneBehavior kLaneBehavior = VIVID_LANE_STRUCTURAL;
+    static constexpr VividMultiplicityBehavior kMultiplicityBehavior = VIVID_MULTIPLICITY_GENERATE;
 
     vivid::Param<int>   count   {"count",   16, 1, 4096};
     vivid::Param<int>   layout  {"layout",  0, {"Grid", "Circle", "Line", "Grid3D"}};

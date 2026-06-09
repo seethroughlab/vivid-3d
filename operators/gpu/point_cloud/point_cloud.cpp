@@ -13,7 +13,7 @@
 // PointCloud — interprets a LANE_ARRAY as [x0,y0, x1,y1, ...] pairs
 //              and produces a PointList mesh.
 //
-// Input:  "positions" (VIVID_PORT_LANE_ARRAY)
+// Input:  "positions" (many-value: VIVID_MULTIPLICITY_MANY)
 // Output: "mesh"      (VIVID_CUSTOM_PORT, topology PointList)
 //
 // Vertex layout: vec2f (xy) = 8 bytes per point.
@@ -48,7 +48,7 @@ struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"positions", VIVID_PORT_LANE_ARRAY, VIVID_PORT_INPUT});
+        out.push_back({.name="positions", .type=VIVID_PORT_SCALAR, .direction=VIVID_PORT_INPUT, .multiplicity=VIVID_MULTIPLICITY_MANY});
         out.push_back(VIVID_CUSTOM_REF_PORT("mesh", VIVID_PORT_OUTPUT, VividMesh));
     }
 
@@ -58,9 +58,9 @@ struct PointCloud : vivid::OperatorBase, vivid::GpuProcessable {
         // Read positions lane: pairs of [x,y]
         uint32_t lane_len = 0;
         const float* lane_data = nullptr;
-        if (ctx->input_lanes && ctx->input_lanes[0].length > 0) {
-            lane_len  = ctx->input_lanes[0].length;
-            lane_data = ctx->input_lanes[0].data;
+        if (ctx->values && vivid_value_count(&ctx->values[0]) > 0) {
+            lane_len  = vivid_value_count(&ctx->values[0]);
+            lane_data = vivid_value_floats(&ctx->values[0]);
         }
 
         uint32_t point_count = lane_len / 2;
